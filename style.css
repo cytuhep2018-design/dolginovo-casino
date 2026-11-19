@@ -1,0 +1,433 @@
+@charset "utf-8";
+
+/* =========================================================================
+   1 · TOKENS / RESET
+   ========================================================================= */
+:root{
+  --cyan:#00f3ff;
+  --violet:#bc13fe;
+  --amber:#ffb02e;
+  --rose:#ff2a6d;
+  --ink:#03060d;
+  --txt:#e4f8ff;
+  --dim:rgba(228,248,255,.55);
+  --glass-a:rgba(10,22,40,.44);
+  --glass-b:rgba(4,10,20,.72);
+  --hairline:rgba(0,243,255,.20);
+  --hairline-2:rgba(188,19,254,.28);
+  --panel-r:20px;
+  /* Кириллица в HUD: Russo One — техно-дисплейный гей (заголовок, цифры,
+     кнопка SPIN, оверлей выигрыша), Exo 2 600 / 700 / 800 — весь остальной
+     интерфейс. Обе гарнитуры покрывают русский алфавит вместе с «ё», так что
+     кириллица не выпадает в системный Segoe UI и не разъезжается по панелькам. */
+  --ff-display:'Russo One','Exo 2','Segoe UI',system-ui,sans-serif;
+  --ff-ui:'Exo 2','Segoe UI',system-ui,sans-serif;
+  /* Russo One выпускается единственного веса 400: просить у него 700/900
+     нельзя — браузер дорисует жирный, и широкие русские слова вылезут
+     из кнопок и бейджей. Поэтому дисплейный вес фиксируется на 400. */
+  --fw-display:400;
+  --fw-ui:600;
+  /* Вырезы экрана, строка состояния и шторка Telegram Mini App: env() попадает в
+     паддинги .hud и в мобильную панель, поэтому HUD никогда не залезает под
+     «чёлку» / нижний индикатор жеста. 0px — фоллбэк для обычного браузера. */
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+}
+*,*::before,*::after{box-sizing:border-box}
+/* 100dvh вместо 100vh: в Telegram Mini App и iOS Safari 100vh считает экран
+   вместе с адресной строкой, из-за чего нижняя панель уезжала за край. Первый
+   declaration — фоллбэк для старых WebView, второй его перебивает.
+   overflow:hidden + overscroll-behavior:none — никакого горизонтального скролла
+   и «резиновой» прокрутки страницы, touch-action:manipulation — никакой случайный
+   зум по двойному тапу (canvas#gl ниже оставляет touch-action:none, чтобы
+   OrbitControls не конфликтовал с жестом камеры). */
+html,body{height:100vh;height:100dvh;margin:0;padding:0;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:var(--ink);color:var(--txt);font-family:var(--ff-ui);font-weight:var(--fw-ui);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:.08em;padding:0}
+label{display:block;font-size:clamp(8px,.72vw,10px);font-weight:var(--fw-ui);letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+output{display:block;font-family:var(--ff-display);font-weight:var(--fw-display);font-variant-numeric:tabular-nums}
+canvas#gl{position:fixed;inset:0;z-index:0;display:block;width:100%;height:100%;touch-action:none;outline:none}
+.defs{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
+
+/* =========================================================================
+   2 · ATMOSPHERE OVERLAY (CSS layer, cheap)
+   ========================================================================= */
+.veil{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.9;mix-blend-mode:screen;
+  background:
+    radial-gradient(130% 92% at 50% 4%, rgba(0,243,255,.07), transparent 55%),
+    radial-gradient(120% 100% at 50% 122%, rgba(188,19,254,.16), transparent 62%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 4px);
+}
+
+/* =========================================================================
+   3 · HUD SHELL + GLASS
+   ========================================================================= */
+.hud{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column;justify-content:space-between;gap:12px;
+  padding:calc(clamp(12px,1.4vw,26px) + var(--safe-t)) calc(clamp(12px,1.4vw,26px) + var(--safe-r)) calc(clamp(12px,1.4vw,26px) + var(--safe-b)) calc(clamp(12px,1.4vw,26px) + var(--safe-l));pointer-events:none}
+.hud::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(106% 88% at 50% 50%, transparent 52%, rgba(2,4,10,.78) 100%)}
+.hud>*{position:relative;z-index:2}
+.hud-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.glass{position:relative;border:1px solid var(--hairline);border-radius:var(--panel-r);
+  background:linear-gradient(158deg,var(--glass-a),var(--glass-b));
+  -webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);
+  box-shadow:0 22px 70px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.07),inset 0 0 34px rgba(0,243,255,.05)}
+.glass::before{content:'';position:absolute;left:16px;right:16px;top:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(0,243,255,.85),transparent)}
+.glass::after{content:'';position:absolute;inset:6px;border-radius:calc(var(--panel-r) - 6px);border:1px solid rgba(188,19,254,.10);pointer-events:none}
+.hud .glass,.hud button{pointer-events:auto}
+.corner{position:absolute;width:13px;height:13px;pointer-events:none;opacity:.85}
+.c-tl{left:8px;top:8px;border-left:2px solid var(--cyan);border-top:2px solid var(--cyan)}
+.c-tr{right:8px;top:8px;border-right:2px solid var(--cyan);border-top:2px solid var(--cyan)}
+.c-bl{left:8px;bottom:8px;border-left:2px solid var(--violet);border-bottom:2px solid var(--violet)}
+.c-br{right:8px;bottom:8px;border-right:2px solid var(--violet);border-bottom:2px solid var(--violet)}
+/* ---------------- brand ---------------- */
+.brand{display:flex;align-items:center;gap:14px}
+.brand-glyph{width:clamp(34px,3.2vw,46px);height:clamp(34px,3.2vw,46px);display:grid;place-items:center;flex:none;
+  border:1px solid var(--hairline);border-radius:12px;color:var(--cyan);font-size:clamp(16px,1.6vw,22px);
+  box-shadow:0 0 18px rgba(0,243,255,.35),inset 0 0 14px rgba(0,243,255,.18);animation:glyphPulse 3.6s ease-in-out infinite}
+.brand-name{margin:0;font-family:var(--ff-display);font-weight:var(--fw-display);font-size:clamp(16px,1.75vw,26px);
+  letter-spacing:.06em;line-height:1.18;color:#fff;white-space:nowrap;
+  text-shadow:0 0 10px rgba(0,243,255,.75),0 0 30px rgba(0,243,255,.35)}
+.brand-name em{color:var(--violet);font-style:normal;padding:0 .16em;text-shadow:0 0 12px rgba(188,19,254,.9)}
+.brand-sub{margin:5px 0 0;font-size:clamp(9px,.8vw,11.5px);font-weight:var(--fw-ui);letter-spacing:.16em;color:var(--dim);text-transform:uppercase}
+.brand-sub b{color:var(--amber);font-weight:600}
+@keyframes glyphPulse{0%,100%{transform:rotate(0) scale(1);opacity:.85}50%{transform:rotate(180deg) scale(1.06);opacity:1}}
+
+/* ---------------- telemetry ---------------- */
+.tele{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.chip{display:flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--hairline);border-radius:999px;
+  background:rgba(4,12,24,.55);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  font-size:clamp(9px,.8vw,11px);font-weight:var(--fw-ui);letter-spacing:.1em;color:var(--dim);white-space:nowrap}
+.chip b{font-family:var(--ff-display);font-weight:var(--fw-display);font-size:clamp(10px,.95vw,13px);color:var(--txt);font-variant-numeric:tabular-nums}
+.chip b.hot{color:var(--cyan);text-shadow:0 0 10px rgba(0,243,255,.8)}
+.chip.is-hot{border-color:var(--amber);box-shadow:0 0 18px rgba(255,176,46,.35)}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--cyan);color:var(--cyan);box-shadow:0 0 10px currentColor;animation:blip 1.9s ease-in-out infinite}
+.dot-violet{background:var(--violet);color:var(--violet)}
+.dot-amber{background:var(--amber);color:var(--amber)}
+.mini{padding:9px 14px;border-radius:999px;border:1px solid var(--hairline-2);
+  background:linear-gradient(180deg,rgba(188,19,254,.22),rgba(0,243,255,.10));
+  font-size:clamp(9px,.85vw,11px);font-weight:var(--fw-ui);letter-spacing:.1em;color:#fff;white-space:nowrap;
+  text-shadow:0 0 10px rgba(0,243,255,.7);
+  transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+.mini:hover{transform:translateY(-1px);box-shadow:0 0 24px rgba(0,243,255,.4)}
+.mini[aria-pressed="true"]{border-color:var(--amber);box-shadow:0 0 24px rgba(255,176,46,.5);color:#fff6e2}
+.mini:focus-visible,.bet-btn:focus-visible,.spin:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+/* ---------------- audio + exit utilities (step 5) ---------------- */
+.util{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;white-space:nowrap}
+.util .ico{width:15px;height:15px;flex:none;display:block;fill:none;stroke:currentColor;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 6px rgba(0,243,255,.6))}
+.util .ico-off{display:none}
+.util .ico-txt{font-size:inherit}
+.util[aria-pressed="false"]{color:var(--dim);border-color:rgba(228,248,255,.14);box-shadow:none;filter:saturate(.3)}
+.util[aria-pressed="false"] .ico{filter:none}
+.util[aria-pressed="false"] .ico-on{display:none}
+.util[aria-pressed="false"] .ico-off{display:block}
+.exit{border-color:rgba(255,42,109,.46);text-shadow:0 0 10px rgba(255,42,109,.8);
+  background:linear-gradient(180deg,rgba(255,42,109,.26),rgba(188,19,254,.12))}
+.exit:hover{box-shadow:0 0 26px rgba(255,42,109,.46)}
+.exit:active{transform:scale(.94)}
+body.is-overdrive .util .ico{filter:drop-shadow(0 0 6px rgba(255,140,40,.65))}
+body.is-overdrive .exit{border-color:rgba(255,194,58,.5)}
+@keyframes blip{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ---------------- side rail ---------------- */
+.hud-mid{flex:1;display:flex;align-items:center;min-height:0}
+.rail{width:clamp(190px,17vw,248px);padding:14px;display:flex;flex-direction:column;gap:10px}
+.rail-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 8px;padding-bottom:8px;border-bottom:1px solid rgba(0,243,255,.14);
+  font-size:clamp(8px,.72vw,10px);font-weight:var(--fw-ui);letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.rail-head span{flex:1 1 auto;min-width:0;line-height:1.35}
+/* Русские статусы длинные («КРУПНЫЙ ВЫИГРЫШ», «СЕССИЯ ЗАКРЫТА»): бейдж
+   переносится по словам, а не распирает узкий рельс слева. */
+.rail-head b{flex:0 1 auto;margin-left:auto;text-align:right;line-height:1.35;
+  font-family:var(--ff-display);font-weight:var(--fw-display);font-size:clamp(9px,.8vw,11px);letter-spacing:.04em;color:var(--cyan);text-shadow:0 0 10px rgba(0,243,255,.6)}
+.rail-log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;min-height:92px}
+.rail-log li{padding-left:9px;border-left:2px solid var(--violet);font-size:clamp(10px,.85vw,12px);font-weight:var(--fw-ui);letter-spacing:.02em;line-height:1.45;color:rgba(226,247,255,.82);overflow-wrap:break-word;animation:logIn .5s cubic-bezier(.16,.84,.44,1) both}
+.rail-log li span{color:var(--cyan)}
+.rail-meter{height:4px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.rail-meter i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--violet),var(--cyan),#fff);box-shadow:0 0 14px rgba(0,243,255,.75);transition:width .14s linear}
+@keyframes logIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+/* ---------------- mobile log tab ----------------
+   Маленькая кнопка «ЛОГ» на левом краю: на телефонах левое окно телеметрии
+   свёрнуто (см. @media ≤768px), и эта кнопка разворачивает его поверх поля.
+   display переключает только мобильный брейкпоинт — на десктопе панели видно
+   всегда, и табулятор не нужен. */
+.rail-fab{display:none;position:fixed;left:calc(8px + var(--safe-l));top:calc(50% - 26px);z-index:8;
+  width:30px;height:52px;place-items:center;border:1px solid var(--hairline);border-radius:10px;
+  background:linear-gradient(180deg,rgba(10,22,40,.86),rgba(4,10,20,.92));
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:0 10px 26px rgba(0,0,0,.5),inset 0 0 14px rgba(0,243,255,.10);
+  font-family:var(--ff-display);font-weight:var(--fw-display);font-size:9px;letter-spacing:.02em;
+  color:var(--cyan);text-shadow:0 0 10px rgba(0,243,255,.7);touch-action:manipulation;
+  transition:box-shadow .18s ease,color .18s ease,transform .12s ease}
+.rail-fab:active{transform:scale(.94)}
+.rail-fab[aria-pressed="true"]{color:#fff6e2;border-color:var(--amber);box-shadow:0 0 20px rgba(255,176,46,.45),inset 0 0 14px rgba(255,176,46,.14)}
+.rail-fab:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+/* =========================================================================
+   4 · BOTTOM DECK / STATS
+   ========================================================================= */
+.hud-bottom{display:flex;justify-content:center}
+.deck{display:flex;align-items:center;gap:clamp(10px,1.8vw,26px);width:min(1300px,100%);
+  padding:clamp(12px,1.3vw,20px) clamp(18px,2vw,32px)}
+/* groups size to their content first (flex-basis:auto) and only then share the
+   leftovers, while space-between + a wide gap keeps the values apart: with the
+   old flex:1 (= basis 0%) + min-width:0 both groups were force-squeezed, the
+   nowrap "×2.00" spilled out of its box and landed on "free spins" */
+.stats{display:flex;align-items:center;justify-content:space-between;
+  gap:clamp(16px,2.2vw,36px);flex:1 1 auto;min-width:0}
+.stats-alt{justify-content:flex-end}
+.stat{position:relative;display:flex;flex-direction:column;gap:5px;min-width:max-content}
+.stat output{font-size:clamp(13px,1.15vw,18px);color:#fff;white-space:nowrap;text-shadow:0 0 12px rgba(0,243,255,.5)}
+.stat-hero{flex:none;padding:0 clamp(10px,1.5vw,24px);border-left:1px solid rgba(0,243,255,.16);border-right:1px solid rgba(0,243,255,.16)}
+.stat-hero output{font-size:clamp(19px,2.4vw,38px);letter-spacing:.02em;color:#fff;
+  text-shadow:0 0 18px rgba(0,243,255,.85),0 0 46px rgba(188,19,254,.6);animation:multBreath 2.6s ease-in-out infinite}
+@keyframes multBreath{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.035);filter:brightness(1.18)}}
+.bet{display:flex;align-items:center;gap:6px}
+.bet output{min-width:56px;text-align:center}
+.bet-btn{width:30px;height:30px;flex:none;border-radius:9px;border:1px solid var(--hairline);color:var(--cyan);
+  background:rgba(0,243,255,.06);font-size:17px;line-height:1;display:grid;place-items:center;
+  transition:background .16s ease,box-shadow .16s ease,transform .12s ease}
+.bet-btn:hover{background:rgba(0,243,255,.18);box-shadow:0 0 16px rgba(0,243,255,.4)}
+.bet-btn:active{transform:scale(.9)}
+
+/* =========================================================================
+   5 · MASSIVE SPIN BUTTON · LIQUID METAL
+   ========================================================================= */
+.spin{position:relative;isolation:isolate;overflow:hidden;flex:none;
+  width:clamp(152px,15.5vw,220px);height:clamp(64px,8.4vh,98px);border-radius:999px;
+  background:radial-gradient(120% 150% at 26% -10%,#20364f 0%,#0a1424 55%,#050b16 100%);
+  box-shadow:0 0 0 1px rgba(0,243,255,.38),0 0 30px rgba(0,243,255,.22),inset 0 0 26px rgba(0,243,255,.14),inset 0 -14px 26px rgba(188,19,254,.18);
+  animation:spinBeat 2.4s cubic-bezier(.4,0,.2,1) infinite}
+.spin-sheet{position:absolute;inset:-38%;z-index:0;opacity:.40;mix-blend-mode:screen;
+  background:conic-gradient(from 0deg,#eaf9ff,#5fd8ff,#bc13fe,#ffffff,#00f3ff,#ff2a6d,#eaf9ff);
+  filter:blur(14px) url(#liquid-metal);animation:metalSwirl 7.5s linear infinite}
+.spin-iris{position:absolute;inset:6px;z-index:1;border-radius:999px;border:1px dashed rgba(0,243,255,.45);animation:irisSpin 16s linear infinite}
+.spin-face{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:3px}
+/* Кнопка «КРУТИТЬ»: Russo One единственного веса и умеренный трекинг, иначе
+   семизначное кириллическое слово вылезает за пилюлю 152-220 px. */
+.spin-label{font-family:var(--ff-display);font-weight:var(--fw-display);font-size:clamp(17px,1.95vw,29px);letter-spacing:.1em;color:#fff;
+  text-shadow:0 0 12px rgba(0,243,255,.9),0 0 34px rgba(0,243,255,.5),0 2px 0 rgba(0,0,0,.55)}
+.spin-hint{font-size:clamp(8px,.75vw,10px);font-weight:var(--fw-ui);letter-spacing:.22em;color:rgba(226,247,255,.6)}
+.spin:hover{filter:brightness(1.12)}
+.spin:active{transform:scale(.965)}
+.spin.is-spinning{animation:spinFlash .62s ease-out}
+.spin.is-spinning .spin-sheet{opacity:.72;animation-duration:1.1s}
+@keyframes metalSwirl{to{transform:rotate(1turn)}}
+@keyframes irisSpin{to{transform:rotate(1turn)}}
+@keyframes spinBeat{
+  0%,100%{transform:scale(1);box-shadow:0 0 0 1px rgba(0,243,255,.32),0 0 26px rgba(0,243,255,.20),inset 0 0 22px rgba(0,243,255,.12),inset 0 -14px 26px rgba(188,19,254,.16)}
+  50%{transform:scale(1.032);box-shadow:0 0 0 1px rgba(0,243,255,.72),0 0 58px rgba(0,243,255,.45),inset 0 0 34px rgba(0,243,255,.24),inset 0 -14px 30px rgba(188,19,254,.30)}
+}
+@keyframes spinFlash{0%{filter:brightness(1.75) saturate(1.4)}100%{filter:brightness(1)}}
+/* low-FX tier: CSS-only metal, no SVG turbulence cost */
+body.is-low .spin-sheet{filter:blur(16px);background:conic-gradient(from 0deg,#0a1424,#5fd8ff,#bc13fe,#ffffff,#00f3ff,#0a1424)}
+/* =========================================================================
+   6 · BOOT OVERLAY
+   ========================================================================= */
+.boot{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:radial-gradient(80% 62% at 50% 42%,#0a1626 0%,#03060d 72%);transition:opacity .7s ease,visibility .7s ease}
+.boot.is-off{opacity:0;visibility:hidden}
+.boot-core{width:min(430px,84vw);display:grid;gap:14px;justify-items:center;text-align:center}
+.boot-mark{font-size:42px;line-height:1;color:var(--cyan);text-shadow:0 0 22px var(--cyan);animation:glyphSpin 3.2s linear infinite}
+.boot-name{font-family:var(--ff-display);font-weight:var(--fw-display);font-size:13px;letter-spacing:.14em;line-height:1.7;color:#fff}
+.boot-track{width:100%;height:3px;border-radius:99px;background:rgba(255,255,255,.10);overflow:hidden}
+.boot-track i{display:block;height:100%;width:12%;background:linear-gradient(90deg,transparent,var(--cyan),#fff);box-shadow:0 0 12px var(--cyan);animation:bootLoad 1.6s ease-in-out infinite}
+.boot-msg{font-size:11px;font-weight:var(--fw-ui);letter-spacing:.1em;line-height:1.75;color:var(--dim);text-transform:uppercase}
+.boot-msg.is-err{color:var(--rose);text-shadow:0 0 14px rgba(255,42,109,.7)}
+@keyframes glyphSpin{to{transform:rotate(1turn)}}
+@keyframes bootLoad{0%{width:8%}50%{width:62%}100%{width:96%}}
+
+/* =========================================================================
+   6.5 · OVERDRIVE (free-spin bonus) — aggressive red / gold override
+   ========================================================================= */
+body.is-overdrive{
+  --cyan:#ff5a3c;--violet:#ffc23a;
+  --hairline:rgba(255,31,61,.26);--hairline-2:rgba(255,194,58,.34);
+  --dim:rgba(255,232,208,.58);
+}
+body.is-overdrive .veil{
+  background:
+    radial-gradient(130% 92% at 50% 4%, rgba(255,31,61,.11), transparent 55%),
+    radial-gradient(120% 100% at 50% 122%, rgba(255,194,58,.18), transparent 62%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 4px);
+}
+body.is-overdrive .glass{box-shadow:0 22px 70px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.07),inset 0 0 34px rgba(255,110,40,.09)}
+body.is-overdrive .spin-label{text-shadow:0 0 12px rgba(255,80,40,.95),0 0 34px rgba(255,194,58,.62),0 2px 0 rgba(0,0,0,.55)}
+body.is-overdrive .stat-hero output{color:#ffd27a;text-shadow:0 0 18px rgba(255,140,40,.7)}
+body.is-overdrive .brand-glyph{color:var(--amber);text-shadow:0 0 22px var(--amber)}
+
+/* =========================================================================
+   6.9 · BIG WIN / MEGA WIN — holographic payout overlay (VFXManager)
+   CSS only carries the chrome: the counting-up payout counter and the
+   auto-close bar are driven by VFXManager.update() in the render loop.
+   There is no 3D particle rain behind it — the panel IS the celebration.
+   ========================================================================= */
+.bigwin{position:fixed;inset:0;z-index:8;display:grid;place-items:center;pointer-events:none;
+  opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}
+.bigwin.is-on{opacity:1;visibility:visible;pointer-events:auto;cursor:pointer}
+.bigwin.is-out{opacity:0;visibility:visible;pointer-events:none;transition:opacity .32s ease}
+.bigwin-bg{position:absolute;inset:0;background:
+  radial-gradient(72% 54% at 50% 50%, rgba(6,16,32,.34) 0%, rgba(3,6,13,.80) 72%, rgba(3,6,13,.92) 100%)}
+.bigwin-rays{position:absolute;left:50%;top:50%;width:170vmax;height:170vmax;translate:-50% -50%;
+  pointer-events:none;mix-blend-mode:screen;opacity:.42;
+  background:conic-gradient(from 0deg,
+    rgba(0,243,255,.00) 0deg, rgba(0,243,255,.20) 12deg, rgba(0,243,255,0) 26deg,
+    rgba(188,19,254,.00) 90deg, rgba(188,19,254,.22) 104deg, rgba(188,19,254,0) 120deg,
+    rgba(0,243,255,.00) 180deg, rgba(0,243,255,.16) 194deg, rgba(0,243,255,0) 208deg,
+    rgba(188,19,254,.00) 270deg, rgba(188,19,254,.18) 284deg, rgba(188,19,254,0) 300deg);
+  animation:bwSpin 9s linear infinite}
+.bigwin-scan{position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:screen;
+  background:repeating-linear-gradient(0deg, rgba(0,243,255,.10) 0 1px, transparent 1px 5px);
+  animation:bwScan 5.2s linear infinite}
+.bigwin.is-mega .bigwin-rays{opacity:.5;
+  background:conic-gradient(from 0deg,
+    rgba(255,194,58,.00) 0deg, rgba(255,194,58,.26) 12deg, rgba(255,194,58,0) 26deg,
+    rgba(255,31,61,.00) 90deg, rgba(255,31,61,.26) 104deg, rgba(255,31,61,0) 120deg,
+    rgba(255,194,58,.00) 180deg, rgba(255,194,58,.20) 194deg, rgba(255,194,58,0) 208deg,
+    rgba(255,31,61,.00) 270deg, rgba(255,31,61,.22) 284deg, rgba(255,31,61,0) 300deg)}
+.bigwin-stage{position:relative;z-index:3;display:grid;justify-items:center;gap:clamp(6px,.8vw,14px);
+  padding:clamp(14px,1.6vw,26px);text-align:center;transform:scale(.84);filter:blur(6px);
+  transition:transform .46s cubic-bezier(.16,1.62,.32,1),filter .34s ease}
+.bigwin.is-on .bigwin-stage{transform:scale(1);filter:blur(0)}
+.bigwin.is-out .bigwin-stage{transform:scale(1.10);filter:blur(5px)}
+.bigwin-panel{position:relative;display:grid;justify-items:center;gap:clamp(4px,.6vw,10px);
+  padding:clamp(16px,1.8vw,30px) clamp(26px,3.4vw,64px);border-radius:26px;
+  border:1px solid var(--hairline-2);
+  background:linear-gradient(160deg,rgba(8,22,42,.62),rgba(3,8,18,.82));
+  -webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);
+  box-shadow:0 30px 90px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 0 60px rgba(0,243,255,.10),0 0 60px rgba(0,243,255,.18);overflow:hidden}
+.bigwin-panel::after{content:'';position:absolute;left:-40%;top:-60%;width:52%;height:220%;
+  transform:rotate(14deg);pointer-events:none;mix-blend-mode:screen;
+  background:linear-gradient(90deg,transparent,rgba(210,250,255,.24),transparent);
+  animation:bwSweep 2.6s cubic-bezier(.5,0,.5,1) infinite}
+.bigwin-kicker{margin:0;max-width:min(82vw,860px);text-align:center;line-height:1.5;
+  font-size:clamp(9px,.86vw,12px);font-weight:var(--fw-ui);letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+.bigwin-kicker b{color:var(--amber);font-weight:600}
+/* «КРУПНЫЙ ВЫИГРЫШ» / «МЕГА ВЫИГРЫШ» — два длинных кириллических слова:
+   Russo One единственного веса, перенос по словам и потолок ширины, чтобы
+   заголовок никогда не расходился с панелью оверлея. */
+.bigwin-title{margin:0;max-width:min(80vw,840px);text-align:center;
+  font-family:var(--ff-display);font-weight:var(--fw-display);line-height:1.02;
+  font-size:clamp(24px,4.3vw,64px);letter-spacing:.06em;color:#fff;
+  text-shadow:0 0 14px rgba(0,243,255,.9),0 0 44px rgba(0,243,255,.5),0 0 96px rgba(188,19,254,.42);
+  animation:bwTier .62s cubic-bezier(.2,1.7,.3,1) both}
+.bigwin-value{font-family:var(--ff-display);font-weight:var(--fw-display);font-variant-numeric:tabular-nums;line-height:1;
+  font-size:clamp(30px,5.8vw,88px);letter-spacing:.04em;color:var(--cyan);
+  text-shadow:0 0 18px rgba(0,243,255,.85),0 0 54px rgba(0,243,255,.42);
+  animation:bwPulse 1.15s ease-in-out infinite}
+.bigwin-value i{font-style:normal;font-size:.42em;letter-spacing:.2em;color:var(--dim);margin-right:.34em}
+.bigwin-value b{font-weight:inherit;font-style:normal}
+.bigwin-sub{margin:0;max-width:min(74vw,720px);text-align:center;line-height:1.6;
+  font-size:clamp(9px,.8vw,11px);font-weight:var(--fw-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.bigwin-bar{position:relative;width:min(420px,52vw);height:3px;border-radius:99px;overflow:hidden;
+  background:rgba(255,255,255,.12)}
+.bigwin-bar i{position:absolute;inset:0 auto 0 0;display:block;width:100%;border-radius:99px;
+  transform-origin:left center;will-change:transform;
+  background:linear-gradient(90deg,rgba(188,19,254,.7),var(--cyan),#fff);box-shadow:0 0 14px var(--cyan)}
+.bigwin.is-mega .bigwin-title{color:#fff3cf;text-shadow:0 0 16px rgba(255,194,58,.95),0 0 46px rgba(255,110,40,.6),0 0 96px rgba(255,31,61,.45)}
+.bigwin.is-mega .bigwin-value{color:#ffcf5c;text-shadow:0 0 20px rgba(255,194,58,.9),0 0 58px rgba(255,110,40,.5)}
+.bigwin.is-mega .bigwin-panel{border-color:rgba(255,194,58,.4);
+  box-shadow:0 30px 90px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 60px rgba(255,140,40,.14),0 0 70px rgba(255,140,40,.28)}
+.bigwin.is-mega .bigwin-bar i{background:linear-gradient(90deg,rgba(255,31,61,.75),var(--amber),#fff);box-shadow:0 0 14px var(--amber)}
+@keyframes bwSpin{to{transform:rotate(1turn)}}
+@keyframes bwScan{to{background-position:0 -160px}}
+@keyframes bwSweep{0%{left:-46%}55%,100%{left:118%}}
+@keyframes bwTier{0%{transform:translateY(16px) scale(.9);opacity:0;letter-spacing:.24em}100%{transform:none;opacity:1;letter-spacing:.06em}}
+@keyframes bwPulse{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.022);filter:brightness(1.22)}}
+
+/* =========================================================================
+   7 · RESPONSIVE / MOTION
+   ========================================================================= */
+/* Русские подписи («ФРИСПИНЫ», «МНОЖИТЕЛЬ», «ОТРИСОВКА») длиннее английских,
+   поэтому второстепенная правая группа панели уходит чуть раньше — 1240px
+   вместо 1120px: нижний декет всегда влезает, «×0.00» не наползает на «ФРИСПИНЫ». */
+@media (max-width:1240px){.stats-alt{display:none}}
+@media (max-width:1120px){.rail{width:clamp(150px,26vw,210px)}}
+/* =========================================================================
+   7.1 · ТЕЛЕФОН ≤ 768px · Telegram Mini App в портрете 9:16 / 9:20
+   Шапка — одна строка, телеметрия свёрнута в кнопку «ЛОГ», нижняя панель
+   перестроена в два ряда (карточки + КРУТИТЬ на всю ширину), оверлей выигрыша
+   масштабируется через clamp(). Камера в это же время отъезжает назад
+   (js/main.js → _fitCamera), поэтому поле 6×6 влезает в ширину целиком.
+   ========================================================================= */
+@media (max-width:768px){
+  /* ---------- 1 · шапка: компактный логотип + ЗВУК / ВЫХОД ---------- */
+  .hud{gap:8px;padding:calc(10px + var(--safe-t)) calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l))}
+  .hud-top{flex-wrap:nowrap;align-items:center;gap:8px}
+  .brand{gap:9px;min-width:0}
+  .brand-glyph{width:30px;height:30px;border-radius:9px;font-size:14px}
+  .brand-name{font-size:clamp(11px,3.2vw,15px);letter-spacing:.03em}
+  .brand-sub{display:none}
+  .tele{flex:none;flex-wrap:nowrap;gap:6px}
+  /* Технические чипы КАДРЫ / ОТРИСОВКА / ГИПЕР и кнопка «ГИПЕР ДРАЙВ» живут
+     только на десктопе: справа от логотипа на телефоне остаются ЗВУК и ВЫХОД,
+     иначе шапка расходится на две строки и съедает место под 3D-поле.
+     Гипер драйв доступен с клавиатуры (H) и из консоли NEON.app.toggleHyperSpeed. */
+  .chip{display:none}
+  #btn-hyper{display:none}
+  .mini.util{min-height:34px;padding:8px 11px;font-size:10px;letter-spacing:.06em}
+  .util .ico{width:14px;height:14px}
+
+  /* ---------- 2 · левое окно «ТЕЛЕМЕТРИЯ ПОЛЯ» свёрнуто ---------- */
+  /* display:none вместо прежнего .hud-mid{display:none}: панель остаётся в DOM
+     и разворачивается кнопкой ЛОГ (hud.toggleRail → body.rail-on) поверх поля */
+  .hud-mid{position:static;z-index:7;align-items:flex-start}
+  .rail-fab{display:grid}
+  .rail{position:fixed;left:calc(46px + var(--safe-l));top:calc(10px + var(--safe-t));z-index:7;
+    width:min(300px,calc(100vw - 62px - var(--safe-l) - var(--safe-r)));max-height:min(48vh,340px);
+    padding:10px;display:none}
+  body.rail-on .rail{display:flex}
+  .rail-log{min-height:0;max-height:24vh;overflow:hidden}
+
+  /* ---------- 3 · нижняя панель: два ряда ---------- */
+  .deck{flex-direction:column;align-items:stretch;gap:10px;width:100%;
+    padding:12px;border-radius:16px}
+  /* Верхний ряд — карточки в одну линию. Сетка, а не flex: «10,000.00» не
+     наползает на «СТАВКУ», а minmax(0,…) даёт колонкам сжиматься вместе с
+     текстом. Четвёртая колонка появляется только вместе с фриспинами. */
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 10px;width:100%;align-items:center}
+  body.has-fs .stats{grid-template-columns:minmax(0,.95fr) minmax(0,1.7fr) minmax(0,.9fr) minmax(0,.75fr)}
+  .stats-alt{display:none}
+  .stat{min-width:0;gap:3px}
+  .stat label{font-size:8px;letter-spacing:.1em}
+  .stat output{font-size:clamp(10px,3vw,15px);letter-spacing:.01em;min-width:0}
+  .stat-balance output{font-size:clamp(10px,2.8vw,15px)}
+  /* «ФРИСПИНЫ» показываются только когда они активны (js: hud.setFreeSpins
+     вешает body.has-fs) — пустая карточка крадёт место у ставки */
+  .stat-fs{display:none}
+  body.has-fs .stat-fs{display:flex}
+  .stat-hero{padding:0 6px}
+  .stat-hero output{font-size:clamp(15px,4.6vw,24px)}
+  .bet{gap:4px;min-width:0}
+  .bet output{min-width:0;flex:1 1 auto;font-size:clamp(9px,2.9vw,14px)}
+  .bet-btn{width:28px;height:28px;border-radius:8px;font-size:15px}
+  /* Нижний ряд — КРУТИТЬ на всю ширину панели под большой палец; подсказка
+     «ПРОБЕЛ» — десктопная, на телефоне её не на чем нажимать */
+  .spin{width:100%;height:clamp(54px,7.2vh,76px);border-radius:999px}
+  .spin-label{font-size:clamp(16px,5.4vw,26px)}
+  .spin-hint{display:none}
+
+  /* ---------- 4 · КРУПНЫЙ / МЕГА ВЫИГРЫШ на узком экране 360px ---------- */
+  /* Заголовок и счётчик на clamp(): две длинные кириллические строки Russo One
+     переносятся по словам и никогда не вылезают за край 360px */
+  .bigwin-stage{padding:12px}
+  .bigwin-panel{gap:6px;padding:16px 12px;border-radius:18px}
+  .bigwin-kicker{max-width:88vw;font-size:clamp(8px,2.6vw,10px);letter-spacing:.12em}
+  .bigwin-title{max-width:90vw;font-size:clamp(17px,6.4vw,30px);letter-spacing:.03em}
+  .bigwin-value{font-size:clamp(22px,8.4vw,44px)}
+  .bigwin-sub{max-width:88vw;font-size:clamp(8px,2.5vw,10px);letter-spacing:.1em;line-height:1.5}
+  .bigwin-bar{width:min(260px,78vw)}
+}
+/* 320–420px (iPhone SE / старые Android): подпись у кнопки ЗВУК уходит — иконка
+   динамика говорит сама за себя, иначе ряд «ЛОГ / ЗВУК / ВЫХОД» не встаёт в
+   одну строку рядом с логотипом. */
+@media (max-width:420px){
+  .brand{gap:7px}
+  .brand-glyph{width:26px;height:26px;font-size:13px}
+  .mini.util{padding:8px 10px}
+  .util .ico-txt{display:none}
+}
+/* Короткий экран (альбомный телефон / ноутбук-трансформер): лог и шкала заряда
+   уходят, но только на десктопе — на телефоне панель и так свёрнута в ЛОГ, и
+   развёрнутый по кнопке журнал обязан оставаться читаемым. */
+@media (max-height:640px) and (min-width:769px){.rail-log{display:none}.rail-meter{display:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}

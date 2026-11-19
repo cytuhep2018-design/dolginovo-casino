@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#03060d" />
+<meta name="description" content="ДОЛГИНОВО КАЗИНО — киберпанк-слот 6×6 с кластерными выплатами: WebGL / Three.js r170, голографический движок, ручной запуск" />
+<title>ДОЛГИНОВО КАЗИНО · КЛАСТЕРНОЕ ПОЛЕ 6×6 — СБОРКА 5 / 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Кириллица: Russo One — техно-дисплейный гей (все надписи HUD, цифры,
+     кнопки), Exo 2 600 / 700 / 800 — интерфейсный текстовый стек. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Exo+2:wght@600;700;800&display=swap" />
+<link rel="stylesheet" href="style.css" />
+
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+<div class="veil" aria-hidden="true"></div>
+
+<div class="hud">
+  <header class="hud-top">
+    <div class="brand">
+      <span class="brand-glyph" aria-hidden="true">◈</span>
+      <div class="brand-txt">
+        <h1 class="brand-name">ДОЛГИНОВО<em>·</em>КАЗИНО</h1>
+        <p class="brand-sub">КЛАСТЕРНОЕ ПОЛЕ 6×6 · РУЧНОЙ ЗАПУСК</p>
+      </div>
+    </div>
+    <div class="tele">
+      <div class="chip"><i class="dot" aria-hidden="true"></i><span>КАДРЫ</span><b id="tele-fps">—</b></div>
+      <div class="chip"><i class="dot dot-violet" aria-hidden="true"></i><span>ОТРИСОВКА</span><b id="tele-draw">—</b></div>
+      <div class="chip" id="chip-hyper"><i class="dot dot-amber" aria-hidden="true"></i><span>ГИПЕР</span><b id="tele-hyper">ВЫКЛ</b></div>
+      <button class="mini" id="btn-hyper" type="button" aria-pressed="false" aria-label="Гипер драйв: включить или выключить">ГИПЕР&nbsp;ДРАЙВ</button>
+      <!-- шаг 5 · переключатель звука (процедурный web-audio) + выход из сессии -->
+      <button class="mini util" id="btn-audio" type="button" aria-pressed="true" aria-label="Звук: вкл / выкл">
+        <svg class="ico ico-on" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 9.4h3.3L11.6 5.2v13.6L7.3 14.6H4z"/>
+          <path d="M15.2 9.1a4.3 4.3 0 0 1 0 5.8"/>
+          <path d="M18.1 6.4a8.3 8.3 0 0 1 0 11.2"/>
+        </svg>
+        <svg class="ico ico-off" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 9.4h3.3L11.6 5.2v13.6L7.3 14.6H4z"/>
+          <path d="M15.6 9.4l5.2 5.2M20.8 9.4l-5.2 5.2"/>
+        </svg>
+        <span class="ico-txt">ЗВУК</span>
+      </button>
+      <button class="mini util exit" id="btn-exit" type="button" title="Завершить сессию и вернуть в Telegram" aria-label="Выйти из игры">ВЫХОД</button>
+    </div>
+  </header>
+  <main class="hud-mid">
+    <!-- Мобильный табулятор журнала: на экранах < 768px левое окно
+         «ТЕЛЕМЕТРИЯ ПОЛЯ» свёрнуто по умолчанию и не закрывает 3D-фрукты,
+         разворачивается этой кнопкой (js/main.js → hud.toggleRail). -->
+    <button class="rail-fab" id="btn-rail" type="button" aria-pressed="false" aria-controls="rail" aria-label="Журнал поля: показать или скрыть">ЛОГ</button>
+    <aside class="rail glass" id="rail">
+      <i class="corner c-tl" aria-hidden="true"></i><i class="corner c-br" aria-hidden="true"></i>
+      <div class="rail-head"><span>телеметрия поля</span><b id="rail-state">СТАРТ</b></div>
+      <ul class="rail-log" id="rail-log" aria-live="polite"></ul>
+      <div class="rail-meter"><i id="rail-charge"></i></div>
+    </aside>
+  </main>
+
+  <footer class="hud-bottom">
+    <section class="deck glass">
+      <i class="corner c-tl" aria-hidden="true"></i><i class="corner c-tr" aria-hidden="true"></i>
+      <i class="corner c-bl" aria-hidden="true"></i><i class="corner c-br" aria-hidden="true"></i>
+
+      <div class="stats">
+        <div class="stat stat-balance">
+          <label for="out-balance">баланс</label>
+          <output id="out-balance">10,000.00</output>
+        </div>
+        <div class="stat">
+          <label id="lbl-bet">ставка</label>
+          <div class="bet">
+            <button class="bet-btn" id="btn-bet-dn" type="button" aria-label="уменьшить ставку">−</button>
+            <output id="out-bet">25.00</output>
+            <button class="bet-btn" id="btn-bet-up" type="button" aria-label="увеличить ставку">+</button>
+          </div>
+        </div>
+        <div class="stat stat-hero">
+          <label for="out-mult">множитель</label>
+          <output id="out-mult">×0.00</output>
+        </div>
+        <div class="stat stat-fs">
+          <label>фриспины</label>
+          <output id="out-fs">0</output>
+        </div>
+      </div>
+
+      <button class="spin" id="btn-spin" type="button">
+        <span class="spin-sheet" aria-hidden="true"></span>
+        <span class="spin-iris" aria-hidden="true"></span>
+        <span class="spin-face"><span class="spin-label">КРУТИТЬ</span><span class="spin-hint">ПРОБЕЛ</span></span>
+      </button>
+
+      <div class="stats stats-alt">
+        <div class="stat"><label>выигрыш</label><output id="out-win">0.00</output></div>
+        <div class="stat"><label>сетка</label><output id="out-grid">6 × 6</output></div>
+        <div class="stat"><label>качество</label><output id="out-quality">УЛЬТРА</output></div>
+      </div>
+    </section>
+  </footer>
+</div>
+
+<div class="boot" id="boot">
+  <div class="boot-core">
+    <div class="boot-mark" aria-hidden="true">◈</div>
+    <div class="boot-name">ДОЛГИНОВО КАЗИНО · ГОЛО-ДВИЖОК</div>
+    <div class="boot-track"><i></i></div>
+    <div class="boot-msg" id="boot-msg">связка three.js r170 · подготовка кластерного движка 6×6 · 7 объёмных 3D-архетипов фруктов и цифр …</div>
+  </div>
+</div>
+
+<!-- BIG WIN / MEGA WIN payout overlay: chrome is CSS, the counting-up counter
+     and the auto-close bar are driven by VFXManager. No 3D rain behind it. -->
+<div class="bigwin" id="bigwin" role="status" aria-live="polite">
+  <div class="bigwin-bg" aria-hidden="true"></div>
+  <div class="bigwin-rays" aria-hidden="true"></div>
+  <div class="bigwin-scan" aria-hidden="true"></div>
+  <div class="bigwin-stage">
+    <div class="bigwin-panel">
+      <i class="corner c-tl" aria-hidden="true"></i><i class="corner c-tr" aria-hidden="true"></i>
+      <i class="corner c-bl" aria-hidden="true"></i><i class="corner c-br" aria-hidden="true"></i>
+      <p class="bigwin-kicker" id="bigwin-kicker">кластерный каскад · множитель <b>×1</b></p>
+      <h2 class="bigwin-title" id="bigwin-title">КРУПНЫЙ ВЫИГРЫШ</h2>
+      <output class="bigwin-value" id="bigwin-value"><i>+</i><b id="bigwin-count">0.00</b></output>
+      <p class="bigwin-sub" id="bigwin-sub">выплата зачислена · нажмите в любом месте, чтобы закрыть</p>
+      <div class="bigwin-bar"><i id="bigwin-bar"></i></div>
+    </div>
+  </div>
+</div>
+
+<svg class="defs" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <filter id="liquid-metal" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.008 0.016" numOctaves="3" seed="11" result="noise">
+      <animate attributeName="baseFrequency" dur="9s" repeatCount="indefinite"
+               values="0.008 0.016; 0.014 0.009; 0.006 0.020; 0.008 0.016" />
+    </feTurbulence>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="22" xChannelSelector="R" yChannelSelector="G" />
+    <feGaussianBlur stdDeviation="0.7" />
+  </filter>
+</svg>
+<noscript><p style="position:fixed;inset:0;display:grid;place-items:center;color:#00f3ff">ВКЛЮЧИТЕ JAVASCRIPT, ЧТОБЫ ЗАПУСТИТЬ ГОЛОГРАФИЧЕСКИЙ ДВИЖОК</p></noscript>
+
+<script>
+/* Boot watchdog: if the ES module never executes (offline CDN / no WebGL2), say so on screen. */
+window.__NEON_BOOTED = false;
+window.addEventListener('error', function (e) {
+  if (window.__NEON_BOOTED || !e || !e.target || e.target.tagName !== 'SCRIPT') return;
+  var m = document.getElementById('boot-msg');
+  if (m) { m.textContent = 'ОТКАЗ СЕТИ · three.js r170 не загрузился с jsdelivr'; m.classList.add('is-err'); }
+}, true);
+window.__NEON_WATCHDOG = setTimeout(function () {
+  if (window.__NEON_BOOTED) return;
+  var m = document.getElementById('boot-msg');
+  if (m && !m.classList.contains('is-err')) { m.textContent = 'ТАЙМАУТ ЗАПУСКА · проверьте доступ к CDN / поддержку WebGL2'; m.classList.add('is-err'); }
+}, 15000);
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module" src="js/main.js"></script>
+
+</body>
+</html>
+
