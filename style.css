@@ -8,7 +8,13 @@
   --violet:#bc13fe;
   --amber:#ffb02e;
   --rose:#ff2a6d;
-  --ink:#03060d;
+  /* Чистый тёмно-фиолетово-синий фон вместо «космоса»: базовый тон canvas#gl
+     (js/main.js → CFG.palette.ink) и три стоп-цвета CSS-градиента, который
+     дорисовывает .veil. Никаких звёзд, пыли и туннеля — только плавный перелив. */
+  --ink:#0b0722;
+  --bg-top:#1b1246;
+  --bg-mid:#070a1e;
+  --bg-bottom:#230c48;
   --txt:#e4f8ff;
   --dim:rgba(228,248,255,.55);
   --glass-a:rgba(10,22,40,.44);
@@ -43,7 +49,7 @@
    и «резиновой» прокрутки страницы, touch-action:manipulation — никакой случайный
    зум по двойному тапу (canvas#gl ниже оставляет touch-action:none, чтобы
    OrbitControls не конфликтовал с жестом камеры). */
-html,body{height:100vh;height:100dvh;margin:0;padding:0;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:var(--ink);color:var(--txt);font-family:var(--ff-ui);font-weight:var(--fw-ui);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+html,body{height:100vh;height:100dvh;margin:0;padding:0;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:linear-gradient(168deg,var(--bg-top) 0%,var(--bg-mid) 46%,var(--bg-bottom) 100%);color:var(--txt);font-family:var(--ff-ui);font-weight:var(--fw-ui);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:.08em;padding:0}
 label{display:block;font-size:clamp(8px,.72vw,10px);font-weight:var(--fw-ui);letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
 output{display:block;font-family:var(--ff-display);font-weight:var(--fw-display);font-variant-numeric:tabular-nums}
@@ -51,13 +57,16 @@ canvas#gl{position:fixed;inset:0;z-index:0;display:block;width:100%;height:100%;
 .defs{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
 
 /* =========================================================================
-   2 · ATMOSPHERE OVERLAY (CSS layer, cheap)
+   2 · BACKGROUND WASH (CSS layer, cheap)
+   Единственная «атмосфера» на фоне: плавный сине-фиолетовый градиент поверх
+   тёмно-фиолетового cleared-canvas. Полосы сканлайнов и звёздная пыль убраны —
+   фон обязан оставаться чистым, чтобы 3D-поле 6×6 читалось мгновенно.
    ========================================================================= */
-.veil{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.9;mix-blend-mode:screen;
+.veil{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.92;mix-blend-mode:screen;
   background:
-    radial-gradient(130% 92% at 50% 4%, rgba(0,243,255,.07), transparent 55%),
-    radial-gradient(120% 100% at 50% 122%, rgba(188,19,254,.16), transparent 62%),
-    repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 4px);
+    radial-gradient(124% 86% at 50% 2%, rgba(58,124,255,.20), transparent 58%),
+    radial-gradient(132% 98% at 50% 120%, rgba(150,42,255,.26), transparent 60%),
+    linear-gradient(180deg, rgba(30,20,84,.30), rgba(6,8,26,.10) 48%, rgba(46,14,88,.34));
 }
 
 /* =========================================================================
@@ -65,7 +74,7 @@ canvas#gl{position:fixed;inset:0;z-index:0;display:block;width:100%;height:100%;
    ========================================================================= */
 .hud{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column;justify-content:space-between;gap:12px;
   padding:calc(clamp(12px,1.4vw,26px) + var(--safe-t)) calc(clamp(12px,1.4vw,26px) + var(--safe-r)) calc(clamp(12px,1.4vw,26px) + var(--safe-b)) calc(clamp(12px,1.4vw,26px) + var(--safe-l));pointer-events:none}
-.hud::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(106% 88% at 50% 50%, transparent 52%, rgba(2,4,10,.78) 100%)}
+.hud::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(108% 90% at 50% 50%, transparent 54%, rgba(9,5,30,.72) 100%)}
 .hud>*{position:relative;z-index:2}
 .hud-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap}
 .glass{position:relative;border:1px solid var(--hairline);border-radius:var(--panel-r);
@@ -100,10 +109,8 @@ canvas#gl{position:fixed;inset:0;z-index:0;display:block;width:100%;height:100%;
   font-size:clamp(9px,.8vw,11px);font-weight:var(--fw-ui);letter-spacing:.1em;color:var(--dim);white-space:nowrap}
 .chip b{font-family:var(--ff-display);font-weight:var(--fw-display);font-size:clamp(10px,.95vw,13px);color:var(--txt);font-variant-numeric:tabular-nums}
 .chip b.hot{color:var(--cyan);text-shadow:0 0 10px rgba(0,243,255,.8)}
-.chip.is-hot{border-color:var(--amber);box-shadow:0 0 18px rgba(255,176,46,.35)}
 .dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--cyan);color:var(--cyan);box-shadow:0 0 10px currentColor;animation:blip 1.9s ease-in-out infinite}
 .dot-violet{background:var(--violet);color:var(--violet)}
-.dot-amber{background:var(--amber);color:var(--amber)}
 .mini{padding:9px 14px;border-radius:999px;border:1px solid var(--hairline-2);
   background:linear-gradient(180deg,rgba(188,19,254,.22),rgba(0,243,255,.10));
   font-size:clamp(9px,.85vw,11px);font-weight:var(--fw-ui);letter-spacing:.1em;color:#fff;white-space:nowrap;
@@ -223,7 +230,7 @@ body.is-low .spin-sheet{filter:blur(16px);background:conic-gradient(from 0deg,#0
 /* =========================================================================
    6 · BOOT OVERLAY
    ========================================================================= */
-.boot{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:radial-gradient(80% 62% at 50% 42%,#0a1626 0%,#03060d 72%);transition:opacity .7s ease,visibility .7s ease}
+.boot{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:radial-gradient(80% 62% at 50% 42%,#1a1246 0%,#0b0722 72%);transition:opacity .7s ease,visibility .7s ease}
 .boot.is-off{opacity:0;visibility:hidden}
 .boot-core{width:min(430px,84vw);display:grid;gap:14px;justify-items:center;text-align:center}
 .boot-mark{font-size:42px;line-height:1;color:var(--cyan);text-shadow:0 0 22px var(--cyan);animation:glyphSpin 3.2s linear infinite}
@@ -245,9 +252,9 @@ body.is-overdrive{
 }
 body.is-overdrive .veil{
   background:
-    radial-gradient(130% 92% at 50% 4%, rgba(255,31,61,.11), transparent 55%),
-    radial-gradient(120% 100% at 50% 122%, rgba(255,194,58,.18), transparent 62%),
-    repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 4px);
+    radial-gradient(124% 86% at 50% 2%, rgba(255,110,60,.20), transparent 58%),
+    radial-gradient(132% 98% at 50% 120%, rgba(255,194,58,.26), transparent 60%),
+    linear-gradient(180deg, rgba(92,26,32,.28), rgba(16,8,24,.10) 48%, rgba(104,44,12,.32));
 }
 body.is-overdrive .glass{box-shadow:0 22px 70px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.07),inset 0 0 34px rgba(255,110,40,.09)}
 body.is-overdrive .spin-label{text-shadow:0 0 12px rgba(255,80,40,.95),0 0 34px rgba(255,194,58,.62),0 2px 0 rgba(0,0,0,.55)}
@@ -358,12 +365,10 @@ body.is-overdrive .brand-glyph{color:var(--amber);text-shadow:0 0 22px var(--amb
   .brand-name{font-size:clamp(11px,3.2vw,15px);letter-spacing:.03em}
   .brand-sub{display:none}
   .tele{flex:none;flex-wrap:nowrap;gap:6px}
-  /* Технические чипы КАДРЫ / ОТРИСОВКА / ГИПЕР и кнопка «ГИПЕР ДРАЙВ» живут
-     только на десктопе: справа от логотипа на телефоне остаются ЗВУК и ВЫХОД,
-     иначе шапка расходится на две строки и съедает место под 3D-поле.
-     Гипер драйв доступен с клавиатуры (H) и из консоли NEON.app.toggleHyperSpeed. */
+  /* Технические чипы КАДРЫ / ОТРИСОВКА живут только на десктопе: справа от
+     логотипа на телефоне остаются ЗВУК и ВЫХОД, иначе шапка расходится на две
+     строки и съедает место под 3D-поле 6×6. */
   .chip{display:none}
-  #btn-hyper{display:none}
   .mini.util{min-height:34px;padding:8px 11px;font-size:10px;letter-spacing:.06em}
   .util .ico{width:14px;height:14px}
 

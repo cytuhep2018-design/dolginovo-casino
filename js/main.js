@@ -1,22 +1,23 @@
 /* =========================================================================
-   CYBERPUNK · NEON HOLOGRAM SLOT 6×6
+   NEON HOLOGRAM SLOT 6×6
     FINAL BUILD 5 / 5 — step 3 (BFS cluster pays 4+, tumble cascades,
     SlotEngine tumbles + ×1→×32 ladder + free spins, EVERY spin started by
-    hand) AND VFXManager: instanced neon spark bursts, decaying camera shake
-    and bezier energy arcs to the multiplier panels — the BIG / MEGA WIN is a
-    holographic overlay with a counting-up counter only, no sphere rain —
-    plus step 5: CyberAudioEngine (pure Web Audio, no mp3/wav: cyberpunk drone
-    bed, turbine spin, glass landings, ladder-synced arps, big-win chord) and
-    the Telegram WebApp wiring (?balance / ?session_id, sendData + close,
-    haptics, mute + exit controls in the HUD chrome).
+    hand) AND VFXManager: instanced neon spark bursts + decaying camera shake
+    (the BIG / MEGA WIN is a holographic overlay with a counting-up counter
+    only) — step 5: CyberAudioEngine (pure Web Audio, no mp3/wav: bright
+    122 BPM major-pentatonic groove, punchy spin whoosh, glass landings,
+    ladder-synced arps, big-win chord) plus the Telegram WebApp wiring
+    (?balance / ?session_id, sendData + close, haptics, mute + exit controls).
+
+    ФОН И ГРАФИКА: космический туннель из колец, летящие частицы, фоновая
+    пыль, светящиеся орбы и конус проектора выключены окончательно. На сцене
+    только поле 6×6 (стеклянная подложка + скан-плита + неоновая рама) и 36
+    крупных 3D-фруктов / цифр на чистом тёмно-фиолетово-синем градиенте.
+    ПОСТ-ОБРАБОТКА: UnrealBloomPass / EffectComposer отключены — рендер идёт
+    напрямую в canvas, мягкое свечение дают собственные emissive-материалы.
    ========================================================================= */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
@@ -24,8 +25,9 @@ const DEG = THREE.MathUtils.degToRad;
 
 /* ---------------- телефон / Telegram Mini App ---------------------------
    768px — ровно та же граница, что и у @media (max-width:768px) в style.css:
-   всё, что уже, считается телефоном и получает лёгкий тир качества,
-   pixelRatio ≤ 2 и портретную авто-рамку камеры. */
+   всё, что уже, считается телефоном и получает лёгкий тир качества и
+   портретную авто-рамку камеры. PixelRatio сверху ограничен жёстко:
+   Math.min(devicePixelRatio, 1.5) — см. CFG.dpr. */
 const MOBILE_BP = 768;
 const isMobileViewport = () => window.innerWidth < MOBILE_BP;
 /** Телефон остаётся телефоном и в альбомной ориентации (innerWidth уже 812):
@@ -45,15 +47,17 @@ const isMobileBoot = () => {
    the screen — only the symbols inside get 1.5× bigger. */
 const CFG = Object.freeze({
   grid:      { size: 6, step: 1.35, min: -3.375, max: 3.375 },
-  tunnel:    { rings: 30, spacing: 6.4, radius: 5.9, startZ: -3.2 },
-  particles: { count: 1500, depth: 300, spread: 46, baseSpeed: 6.0, hyperBoost: 8.5 },
+  /* Жёсткий потолок pixelRatio для ВСЕХ устройств: Math.min(devicePixelRatio,
+     1.5). На телефоне с dpr 3-4 это снимает в 2-4 раза больше пикселей с
+     фрагментного конвейера, а без bloom-проходов картинка остаётся резкой. */
+  dpr:       1.5,
   /* Heavy VFX (VFXManager): everything pooled behind an InstancedMesh, the
      массивы посчитаны под лестницу качества УЛЬТРА / ВЫСОКОЕ / БЫСТРОЕ.
      Sparks are deliberately tiny: a cluster burst is a puff of neon embers —
-     no flying orbs, nothing arcs across the stage any more. */
+     6-8 искр на ячейку вместо прежних 11, ни летящих шаров, ни дождя. */
   vfx: {
-    shardCap: 420, flashCap: 112,
-    shardsPerCell: [11, 8, 5],       /* neon sparks per vanished symbol */
+    shardCap: 320, flashCap: 96,
+    shardsPerCell: [8, 7, 6],        /* neon sparks per vanished symbol */
     overlayHold: 3.5, countDur: 0.95
   },
   /* Glossy 3D fruit + arcade digits: unit-space models scaled by size, and by
@@ -70,7 +74,6 @@ const CFG = Object.freeze({
      назад от «поле впритык», aimMax — потолок вертикального прицела в юнитах. */
   view:      { azimuth: DEG(21), polarMin: DEG(71), polarMax: DEG(97), distMin: 10.6, distMax: 13.4,
                fitWidth: 9.2, fitPad: 1.05, fitBack: 1.16, aimMax: 1.8 },
-  bloom:     { strength: 0.25, radius: 0.25, threshold: 0.85 },
   palette: {
     cyan:   { hex: 0x00f3ff, rgb: '0,243,255' },
     violet: { hex: 0xbc13fe, rgb: '188,19,254' },
@@ -79,19 +82,27 @@ const CFG = Object.freeze({
     /* OVERDRIVE (free-spin bonus): red / gold pair mirroring the violet / cyan roles */
     red:    { hex: 0xff1f3d, rgb: '255,31,61' },
     gold:   { hex: 0xffc23a, rgb: '255,194,58' },
-    ink:    0x03060d
+    /* Тёмно-фиолетовая база фона — тот же тон, что и --ink в style.css: canvas
+       заливается им целиком, а сине-фиолетовый перелив сверху рисует CSS-слой
+       .veil, поэтому никакой 3D-«космос» на заднем плане не нужен вовсе. */
+    ink:    0x0b0722
   }
 });
 
 /* Adaptive quality ladder — keeps the target at 60 FPS.
-   bloom values are absolute strengths: every tier is pinned to the anti-blowout
-   calibration 0.25 strength / 0.25 radius / 0.85 threshold (see CFG.bloom).
+  Post-processing больше нет, поэтому ярус качества решает только про
+   разрешение (dprCap), преломлённую подложку поля и «жидкий» металл кнопки.
    Имена ярусов — русские, они уходят прямо в бейдж «КАЧЕСТВО» на нижней панели. */
 const TIERS = Object.freeze([
-  { name: 'УЛЬТРА',  dprCap: 1.85, bloom: 0.25, transmission: 0.90, grade: true,  liquid: true  },
-  { name: 'ВЫСОКОЕ', dprCap: 1.40, bloom: 0.25, transmission: 0.55, grade: true,  liquid: true  },
-  { name: 'БЫСТРОЕ', dprCap: 1.00, bloom: 0.25, transmission: 0.00, grade: false, liquid: false }
+  { name: 'УЛЬТРА',  dprCap: 1.50, transmission: 0.90, liquid: true  },
+  { name: 'ВЫСОКОЕ', dprCap: 1.30, transmission: 0.55, liquid: true  },
+  { name: 'БЫСТРОЕ', dprCap: 1.00, transmission: 0.00, liquid: false }
 ]);
+
+/* Мягкое свечение без bloom: раз пост-обработка отключена, собственное
+   emissive-свечение материалов поднимается, чтобы фрукты и цифры всё ещё
+   светились изнутри, а не выглядели плоскими plastic-игрушками. */
+const EMISSIVE_BOOST = 1.45;
 
 const { clamp, lerp, smoothstep } = THREE.MathUtils;
 const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
@@ -146,46 +157,12 @@ function roundedRect(w, h, r, seg = 10) {
   return pts;
 }
 /* =========================================================================
-   GLSL — particle streaks, holographic scan plate, final grade pass
+   GLSL — holographic scan plate only.
+   Particle streaks (летящая космическая пыль) и финальный grade-проход
+   (хроматическая аберрация / зерно / скан-полосы пост-обработки) удалены
+   вместе с туннелем и EffectComposer: на фоне остаётся ровно один дешёвый
+   шейдер — плита сканлайнов внутри неоновой рамы поля 6×6.
    ========================================================================= */
-const PARTICLE_VERT = /* glsl */`
-attribute vec3 aColor;
-attribute float aSize;
-attribute float aSpeed;
-uniform float uHyper;
-uniform float uTime;
-uniform float uPixelRatio;
-varying vec3 vColor;
-varying float vFade;
-void main() {
-  vColor = aColor;
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  float depth = max(-mv.z, 0.001);
-  float near = smoothstep(1.5, 15.0, depth);
-  float far = 1.0 - smoothstep(95.0, 300.0, depth);
-  vFade = near * far;
-  float twinkle = 0.72 + 0.28 * sin(uTime * 3.0 + aSpeed * 42.0);
-  float size = aSize * (1.0 + uHyper * 2.1) * twinkle;
-  gl_PointSize = min(size * uPixelRatio * (300.0 / depth), 110.0 * uPixelRatio);
-  gl_Position = projectionMatrix * mv;
-}`;
-
-const PARTICLE_FRAG = /* glsl */`
-precision highp float;
-uniform float uHyper;
-varying vec3 vColor;
-varying float vFade;
-void main() {
-  vec2 p = gl_PointCoord * 2.0 - 1.0;
-  float d2 = dot(p, p);
-  if (d2 > 1.0) discard;
-  float core = exp(-d2 * 5.0);
-  float halo = exp(-d2 * 1.35);
-  float alpha = clamp((core * 0.85 + halo * 0.30) * vFade, 0.0, 1.0);
-  vec3 col = mix(vColor, vec3(1.0), core * 0.5) * (1.0 + uHyper * 0.9);
-  gl_FragColor = vec4(col, alpha);
-}`;
-
 const PLATE_VERT = /* glsl */`
 varying vec2 vUv;
 void main() {
@@ -196,7 +173,7 @@ void main() {
 const PLATE_FRAG = /* glsl */`
 precision highp float;
 uniform float uTime;
-uniform float uHyper;
+uniform float uPulse;
 uniform vec3 uColorA;
 uniform vec3 uColorB;
 varying vec2 vUv;
@@ -211,53 +188,11 @@ void main() {
   float grid = step(0.985, fract(uv.x * 9.0)) + step(0.985, fract(uv.y * 9.0));
   float flick = 0.92 + 0.08 * sin(uTime * 26.0 + hash(uv * 90.0) * 6.2831);
   vec3 col = mix(uColorA, uColorB, clamp(uv.y + 0.25 * sin(uTime * 0.6), 0.0, 1.0));
-  col *= (0.055 + scan * 0.14 + band * 0.20 + grid * 0.20) * flick * (1.0 + uHyper * 1.4);
+  col *= (0.055 + scan * 0.14 + band * 0.20 + grid * 0.20) * flick * (1.0 + uPulse * 1.4);
   float alpha = (0.085 + scan * 0.13 + band * 0.20 + grid * 0.15) * edge * flick;
   gl_FragColor = vec4(col * edge, alpha);
 }`;
 
-const GRADE_SHADER = {
-  name: 'CyberpunkGradeShader',
-  uniforms: {
-    tDiffuse: { value: null },
-    uTime: { value: 0 },
-    uHyper: { value: 0 },
-    uAber: { value: 0.0018 },
-    uVignette: { value: 1.18 },
-    uScan: { value: 0.045 },
-    uGrain: { value: 0.045 }
-  },
-  vertexShader: PLATE_VERT,
-  fragmentShader: /* glsl */`
-precision highp float;
-uniform sampler2D tDiffuse;
-uniform float uTime;
-uniform float uHyper;
-uniform float uAber;
-uniform float uVignette;
-uniform float uScan;
-uniform float uGrain;
-varying vec2 vUv;
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-void main() {
-  vec2 uv = vUv;
-  vec2 dir = uv - 0.5;
-  float rad = length(dir);
-  float ab = uAber * (1.0 + uHyper * 2.4);
-  vec3 col;
-  col.r = texture2D(tDiffuse, uv - dir * ab).r;
-  col.g = texture2D(tDiffuse, uv).g;
-  col.b = texture2D(tDiffuse, uv + dir * ab).b;
-  col *= 1.0 - smoothstep(0.34, 0.98, rad) * uVignette * 0.55;
-  float scan = 0.5 + 0.5 * sin(uv.y * 760.0 + uTime * 1.6);
-  col *= 1.0 - uScan * scan;
-  float lum = clamp(dot(col, vec3(0.2126, 0.7152, 0.0722)) * 2.0, 0.0, 1.0);
-  col += vec3(0.006, 0.013, 0.024) * (1.0 - lum);
-  float g = hash(uv * vec2(1024.0, 768.0) + fract(uTime) * 97.0) - 0.5;
-  col += g * uGrain;
-  gl_FragColor = vec4(max(col, 0.0), 1.0);
-}`
-};
 /* =========================================================================
    HUD controller — DOM state only (real game logic arrives in step 2)
    ========================================================================= */
@@ -266,11 +201,11 @@ class Hud {
     const $ = (id) => document.getElementById(id);
     this.el = {
       boot: $('boot'), bootMsg: $('boot-msg'),
-      fps: $('tele-fps'), draw: $('tele-draw'), hyperState: $('tele-hyper'), chipHyper: $('chip-hyper'),
+      fps: $('tele-fps'), draw: $('tele-draw'),
       railState: $('rail-state'), railLog: $('rail-log'), railCharge: $('rail-charge'),
       balance: $('out-balance'), bet: $('out-bet'), mult: $('out-mult'), fs: $('out-fs'),
       win: $('out-win'), grid: $('out-grid'), quality: $('out-quality'),
-      spin: $('btn-spin'), hyper: $('btn-hyper'), betUp: $('btn-bet-up'), betDn: $('btn-bet-dn'),
+      spin: $('btn-spin'), betUp: $('btn-bet-up'), betDn: $('btn-bet-dn'),
       mute: $('btn-audio'), exit: $('btn-exit'),
       /* мобильная телеметрия: панель «ТЕЛЕМЕТРИЯ ПОЛЯ» + кнопка-табулятор ЛОГ,
           на экранах < 768px панель свёрнута по умолчанию (style.css, body.rail-on) */
@@ -335,12 +270,8 @@ class Hud {
 
   setDraws(v) { this._set('draw', this.el.draw, String(v)); }
 
-  setHyper(on) {
-    this._set('hyper', this.el.hyperState, on ? 'МАКС' : 'ВЫКЛ');
-    if (this.el.chipHyper) this.el.chipHyper.classList.toggle('is-hot', on);
-    if (this.el.hyper) this.el.hyper.setAttribute('aria-pressed', String(on));
-  }
-
+  /** Шкала «заряд» в левом окне телеметрии: больше это не шкала гипер драйва,
+      а прогресс лестницы множителя ×1 → ×32 (0 % … 100 %). */
   setCharge(pct) {
     const w = clamp(pct, 0, 100).toFixed(1) + '%';
     if (this.el.railCharge && this._cache.charge !== w) {
@@ -379,7 +310,8 @@ class Hud {
 /* =========================================================================
    SYMBOL TYPES — one row per archetype: the seven glossy 3D fruit / digit
    models. hex + accent tint the neon sparks of a cluster detonation, gain
-   keeps those sparks HDR-safe against the 0.85 bloom threshold.
+   keeps those sparks bright in their own additive HDR shader (bloom-прохода
+   больше нет, поэтому яркость искр полностью в их руках).
    key stays Latin (it seeds the Object3D names and the factory debug info),
    label is the Russian name the telemetry rail and the big win log print.
    ========================================================================= */
@@ -453,13 +385,15 @@ class SymbolFactory {
    * The one candy-shell preset every part uses: metalness 0.2, roughness 0.25
    * and a soft emissive core so the fruit never goes flat in the dark rows of
    * the field. envMapIntensity leans on the RoomEnvironment probe for the wet
-   * specular highlight; the bloom threshold (0.85) only catches the emissive.
+   * specular highlight. Post-processing is off, so the soft glow of every
+   * symbol is its OWN light: emissiveIntensity is scaled by EMISSIVE_BOOST
+   * instead of being picked up by a bloom threshold that no longer exists.
    */
   _glossy(hex, emissive, intensity, env = 1.15, metalness = 0.2, roughness = 0.25) {
     const mat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(hex),
       emissive: new THREE.Color(emissive),
-      emissiveIntensity: intensity,
+      emissiveIntensity: intensity * EMISSIVE_BOOST,
       metalness,
       roughness,
       envMapIntensity: env
@@ -932,19 +866,21 @@ class SymbolFactory {
     if (typeof group.clear === 'function') group.clear();
   }
 
-  /** Advance every registered part motion (the star spin + the scatter halo). */
-  update(dt, t, hyper = 0) {
+  /** Advance every registered part motion (the star spin + the scatter halo).
+      `pulse` — тот самый затухающий импульс КРУТИТЬ: на мгновение частицы
+      внутри моделей разгоняются и подпрыгивают вместе со всем полем. */
+  update(dt, t, pulse = 0) {
     const spinners = this.spinners;
     for (let i = 0; i < spinners.length; i++) {
       const s = spinners[i];
       if (!s.listed) continue;
-      s.obj.rotateOnWorldAxis(s.axis, s.speed * s.mul * dt * (1 + hyper * s.boost));
+      s.obj.rotateOnWorldAxis(s.axis, s.speed * s.mul * dt * (1 + pulse * s.boost));
     }
     const pulsers = this.pulsers;
     for (let i = 0; i < pulsers.length; i++) {
       const p = pulsers[i];
       if (!p.listed) continue;
-      p.obj.scale.setScalar(p.base + p.amp * Math.sin(t * p.rate + p.phase) + hyper * p.amp * 0.4);
+      p.obj.scale.setScalar(p.base + p.amp * Math.sin(t * p.rate + p.phase) + pulse * p.amp * 0.4);
     }
   }
 
@@ -1001,9 +937,10 @@ class SymbolFactory {
 
 /* =========================================================================
    VFX GLSL — pooled instanced shards + flash sprites, nothing else.
-   Both programs are additive + HDR, so UnrealBloomPass turns them into
-   real light. A retired pool slot (aGlow ≤ 0) is clipped away inside the
-   vertex stage, so an idle pool costs zero fragments and zero fill.
+   Both programs are additive + HDR: without a bloom pass they ARE their own
+   light, so the tint is pre-multiplied well above 1.0. A retired pool slot
+   (aGlow ≤ 0) is clipped away inside the vertex stage, so an idle pool costs
+   zero fragments and zero fill.
    ========================================================================= */
 const VFX_SHARD_VERT = /* glsl */`
 attribute float aShell;   /* static vertex tag: 0 = tetra half, 1 = octa half */
@@ -1640,7 +1577,8 @@ class VFXManager {
 }
 
 /* =========================================================================
-   CyberpunkScene — hologram stage, tunnel, field, post FX, render loop
+   CyberpunkScene — hologram stage: чистое поле 6×6 + рендер напрямую в canvas
+   (никаких tunnel / particles / post FX, никакого «космоса» на заднем плане)
    ========================================================================= */
 class CyberpunkScene {
   constructor(canvas, hud) {
@@ -1648,8 +1586,6 @@ class CyberpunkScene {
     this.hud = hud;
 
     /* public state — driven by SlotEngine (step 3) */
-    this.isHyperSpeed = false;
-    this.hyperBlend = 0;
     this.spinKick = 0;
     this.spinWave = -1;
     this.overdrive = false;
@@ -1657,20 +1593,24 @@ class CyberpunkScene {
     this.engine = null;
     /* heavy FX layer (step 4): created in _initVFX once the stage exists */
     this.vfx = null;
-    this._bloomBase = CFG.bloom.strength;
 
     this.clock = new THREE.Clock();
     this.disposables = [];
     this._raf = 0;
     this._tier = 0;
-    /* Телефон по умолчанию стартует с лёгкого тира (ВЫСОКОЕ) и с pixelRatio ≤ 2:
-       красивая преломлённая плитка + bloom на мобильном GPU стоят 60 FPS, а
-       нагретый телефон теряет кадры быстрее, чем игрок успевает это заметить.
+    /* Шкала прогресса лестницы множителя — то, чем теперь живёт нижняя полоска
+       «заряд» в окне телеметрии (раньше она показывала гипер драйв). */
+    this._charge = 0;
+    /* Телефон по умолчанию стартует с лёгкого тира (ВЫСОКОЕ): преломлённая
+       стеклянная подложка поля стоит мобильному GPU дороже всего, а нагретый
+       телефон теряет кадры быстрее, чем игрок успевает это заметить.
        _tierFloor — пол для FPS-гарда: вниз он шагает и дальше, назад — только
-       до этого потолка, иначе через 12 c телефон снова уедет в УЛЬТРА. */
+       до этого потолка, иначе через 12 c телефон снова уедет в УЛЬТРА.
+       _dprHardCap — абсолютный потолок пикселей для ВСЕХ устройств:
+       CFG.dpr = 1.5, т.е. итог всегда Math.min(window.devicePixelRatio, 1.5). */
     this.isMobile = isMobileBoot();
     this._tierFloor = this.isMobile ? 1 : 0;
-    this._dprHardCap = this.isMobile ? 2 : Number.POSITIVE_INFINITY;
+    this._dprHardCap = CFG.dpr;
     this._tier = this._tierFloor;
     this._pixelCap = Math.min(TIERS[this._tierFloor].dprCap, this._dprHardCap);
     /* Портретная рамка: _fitCamera считает дистанцию «всё поле 6×6 в кадре» и
@@ -1693,10 +1633,7 @@ class CyberpunkScene {
     this._initCamera();
     this._initControls();
     this._initLights();
-    this._initTunnel();
-    this._initParticles();
     this._initBoard();
-    this._initPostFX();
     this._initVFX();
     this._bindWindow();
     this._resize();
@@ -1705,23 +1642,32 @@ class CyberpunkScene {
 
   /* ---------------- core ---------------- */
   _initRenderer() {
+    /* Рендер идёт напрямую в canvas: EffectComposer / RenderPass /
+       UnrealBloomPass / OutputPass из импортов убраны, поэтому никаких
+       offscreen-буферов и дополнительных полноэкранных проходов на телефоне
+       больше нет. MSAA включается только на десктопе — на мобильном GPU
+       сглаживание стоит дороже, чем выглядит. */
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: false,
+      antialias: !isMobileBoot(),
       alpha: false,
       stencil: false,
+      depth: true,
       powerPreference: 'high-performance'
     });
+    /* Тёмно-фиолетовая база фона = --ink из style.css; сине-фиолетовый
+       перелив поверх неё рисует CSS-слой .veil, так что 3D-фон не нужен. */
     this.renderer.setClearColor(CFG.palette.ink, 1);
     this.renderer.setClearAlpha(1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.78;
+    /* Экспозиция поднята с 0.78: раньше bloom дотягивал картинку до нужной
+       яркости, теперь её тянут собственные emissive-материалы. */
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = false;
     this.renderer.info.autoReset = false;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(CFG.palette.ink, 0.0085);
   }
 
   _initEnvironment() {
@@ -1799,112 +1745,11 @@ class CyberpunkScene {
     this.scene.add(this.lightViolet, this.lightCyan);
   }
 
-  /* ---------------- hex tunnel ---------------- */
-  _hexGeometry(radius) {
-    const pts = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i + Math.PI / 6;
-      pts.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0));
-    }
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    this.disposables.push(geo);
-    return geo;
-  }
-
-  _initTunnel() {
-    const { rings, spacing, radius, startZ } = CFG.tunnel;
-    this._tunnelSpan = rings * spacing;
-    this.tunnel = new THREE.Group();
-    this.tunnel.name = 'hex-tunnel';
-    const hex = this._hexGeometry(1);
-
-    for (let i = 0; i < rings; i++) {
-      const pal = i % 3 === 0 ? CFG.palette.violet : CFG.palette.cyan;
-      const hot = i % 3 === 0 ? CFG.palette.red : CFG.palette.gold;
-      const baseColor = hdr(pal.hex, 1.1);
-      const hotColor = hdr(hot.hex, 1.35);
-      const mat = new THREE.LineBasicMaterial({ color: baseColor.clone(), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
-      const ring = new THREE.LineLoop(hex, mat);
-      const jitter = 0.82 + (i % 5) * 0.09;
-      const ringRadius = radius * jitter;
-      ring.position.set(Math.sin(i * 0.7) * 0.9, Math.cos(i * 0.53) * 0.7, startZ - i * spacing);
-      ring.rotation.z = i * 0.26;
-      ring.scale.set(ringRadius, ringRadius, 1);
-      ring.userData = {
-        baseColor,
-        hotColor,
-        radius: ringRadius,
-        spin: ((i % 2) ? -1 : 1) * (0.04 + (i % 4) * 0.015),
-        phase: i * 0.63
-      };
-      this.tunnel.add(ring);
-      this.disposables.push(mat);
-    }
-    this.scene.add(this.tunnel);
-
-    /* cyber floor grid far below the tunnel */
-    const grid = new THREE.GridHelper(200, 50, CFG.palette.cyan.hex, CFG.palette.violet.hex);
-    grid.material.transparent = true;
-    grid.material.opacity = 0.075;
-    grid.material.blending = THREE.AdditiveBlending;
-    grid.material.depthWrite = false;
-    grid.position.set(0, -7.6, -84);
-    this.floorGrid = grid;
-    this.scene.add(grid);
-    this.disposables.push(grid.geometry, grid.material);
-  }
-
-  /* ---------------- 1500 particle warp stream ---------------- */
-  _initParticles() {
-    const { count, depth, spread, baseSpeed } = CFG.particles;
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    const speeds = new Float32Array(count);
-    const col = this._tmpColor;
-
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 3 + Math.pow(Math.random(), 0.62) * spread;
-      positions[i * 3] = Math.cos(angle) * radius;
-      positions[i * 3 + 1] = Math.sin(angle) * radius * 0.62;
-      positions[i * 3 + 2] = -Math.random() * depth + 14;
-      const pick = Math.random();
-      col.setHex(pick > 0.74 ? CFG.palette.violet.hex : (pick > 0.16 ? CFG.palette.cyan.hex : 0xffffff));
-      col.multiplyScalar(0.95 + Math.random() * 0.9);
-      colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b;
-      sizes[i] = 0.55 + Math.random() * 1.9;
-      speeds[i] = 0.45 + Math.random();
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-    geo.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
-    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, -depth * 0.5), depth + spread);
-
-    const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        uHyper: { value: 0 },
-        uTime: { value: 0 },
-        uPixelRatio: { value: this.renderer.getPixelRatio() }
-      },
-      vertexShader: PARTICLE_VERT,
-      fragmentShader: PARTICLE_FRAG,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-
-    this.particleMat = mat;
-    this.particleSpeeds = speeds;
-    this.particleSpan = depth + 20;
-    this.particles = new THREE.Points(geo, mat);
-    this.particles.frustumCulled = false;
-    this.scene.add(this.particles);
-    this.disposables.push(geo, mat);
-  }
+  /* КОСМИЧЕСКИЙ ТУННЕЛЬ УБРАН ПОЛНОСТЬЮ: 30 гексагональных колец
+     «гиперпространства», кибер-пол из GridHelper и поток из 1500 летящих
+     частиц-звёзд больше не существуют — ни мешей, ни шейдеров, ни покадровых
+     обновлений. Задний план отдали чистому CSS-градиенту (style.css → .veil)
+     поверх тёмно-фиолетовой заливки canvas#gl. */
   /* ---------------- 6×6 holographic field ---------------- */
   _initBoard() {
     this.board = new THREE.Group();
@@ -1918,7 +1763,6 @@ class CyberpunkScene {
     this._buildCells();
     this._buildSymbols();
     this._buildCorners();
-    this._buildProjector();
     this.scene.add(this.board);
   }
 
@@ -1960,7 +1804,7 @@ class CyberpunkScene {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uHyper: { value: 0 },
+        uPulse: { value: 0 },
         uColorA: { value: new THREE.Color(CFG.palette.violet.hex) },
         uColorB: { value: new THREE.Color(CFG.palette.cyan.hex) }
       },
@@ -2137,7 +1981,6 @@ class CyberpunkScene {
      while the layer as a whole breathes with the spin wave in sync.
      lift / pop / land / vanish are per-frame values written by SlotEngine. */
   _updateSymbols(dt, t) {
-    const hyper = this.hyperBlend;
     const kick = this.spinKick;
     const waveActive = this.spinWave >= 0;
     const waveX = waveActive ? CFG.grid.min + this.spinWave * (CFG.grid.size - 1) * CFG.grid.step : 99;
@@ -2157,7 +2000,7 @@ class CyberpunkScene {
         home.y + lift + Math.sin(t * 0.9 + s.phase) * 0.02,
         s.frontZ + bob + bump * 0.42 + kick * 0.15 + pop * 0.5
       );
-      const breathe = 1 + Math.sin(t * 2 + s.phase) * 0.02 + bump * 0.16 + kick * 0.07 + hyper * 0.05 +
+      const breathe = 1 + Math.sin(t * 2 + s.phase) * 0.02 + bump * 0.16 + kick * 0.07 +
         pop * (0.32 + 0.1 * Math.sin(t * 16 + s.phase)) -
         (s.land || 0) * 0.14;
       /* The breathe / pop / land wave must keep the archetype footprint ratio:
@@ -2171,7 +2014,9 @@ class CyberpunkScene {
       if (pop > 0.02) g.rotation.y += dt * pop * 4.2;
     }
 
-    this.symbolFactory.update(dt, t, hyper);
+    /* hyper → импульс КРУТИТЬ: внутримодельные спиннеры / пульсеры на мгновение
+       разгоняются вместе со всем полем, когда игрок нажал кнопку. */
+    this.symbolFactory.update(dt, t, Math.min(kick, 1));
   }
 
   /* Angular corner accents: L brackets + pulsing nodes + glow sprites. */
@@ -2201,60 +2046,16 @@ class CyberpunkScene {
       }
     }
   }
-  /* Hologram projector: light cone from the deck up into the field. */
-  _buildProjector() {
-    const coneGeo = new THREE.ConeGeometry(6.2, 3.8, 6, 1, true);
-    const coneMat = new THREE.MeshBasicMaterial({
-      color: hdr(CFG.palette.cyan.hex, 1.1), transparent: true, opacity: 0.09,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
-    });
-    const cone = new THREE.Mesh(coneGeo, coneMat);
-    cone.rotation.x = Math.PI;
-    cone.position.set(0, -7.3, -0.4);
-    this.projector = { cone, coneMat };
-    this.board.add(cone);
+  /* Конус проектора, торцовое кольцо и пятно «деки» под полем (проектор
+     светил снизу вверх на голограмму) убраны вместе с космосом: под полем
+     6×6 теперь просто чистый градиент фона. Свет дают четыре направленные /
+     точечные лампы из _initLights и собственные emissive-материалы символов.
 
-    const ringGeo = new THREE.TorusGeometry(1.5, 0.06, 8, 64);
-    const ringMat = new THREE.MeshBasicMaterial({ color: hdr(CFG.palette.violet.hex, 1.5), transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(0, -9.2, -0.4);
-    this.projectorRing = ring;
-    this.board.add(ring);
-
-    const deckGlowMat = new THREE.SpriteMaterial({ map: this._glowViolet, color: 0xffffff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false });
-    const deckGlow = new THREE.Sprite(deckGlowMat);
-    deckGlow.position.set(0, -9.2, -0.4);
-    deckGlow.scale.setScalar(9);
-    this.board.add(deckGlow);
-    this.projectorGlow = { sprite: deckGlow, mat: deckGlowMat };
-    this.disposables.push(coneGeo, coneMat, ringGeo, ringMat, deckGlowMat);
-  }
-
-  /* ---------------- post processing ---------------- */
-  _initPostFX() {
-    const size = this.renderer.getSize(new THREE.Vector2());
-    const samples = this.renderer.capabilities.isWebGL2 ? 4 : 0;
-    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples });
-
-    this.composer = new EffectComposer(this.renderer, target);
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
-
-    this.renderPass = new RenderPass(this.scene, this.camera);
-    this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.x, size.y),
-      CFG.bloom.strength,
-      CFG.bloom.radius,
-      CFG.bloom.threshold
-    );
-    this.gradePass = new ShaderPass(GRADE_SHADER);
-    this.outputPass = new OutputPass();
-
-    this.composer.addPass(this.renderPass);
-    this.composer.addPass(this.bloomPass);
-    this.composer.addPass(this.gradePass);
-    this.composer.addPass(this.outputPass);
-  }
+     POST-PROCESSING БОЛЬШЕ НЕТ: EffectComposer + RenderPass + UnrealBloomPass
+     + ShaderPass(grade) + OutputPass удалены вместе с импортами. Кадр пишется
+     напрямую renderer.render(scene, camera) — на телефоне это минус четыре
+     полноэкранных прохода и минус два HalfFloat-буфера, а мягкое свечение
+     держится на emissive-каналах самих символов (EMISSIVE_BOOST). */
 
   /* ---------------- heavy VFX layer (step 4) ---------------- */
   /** Mounted as a child of the field group so bursts inherit the hologram
@@ -2271,13 +2072,8 @@ class CyberpunkScene {
     const tier = TIERS[index];
     if (!tier) return;
     this._tier = index;
+    /* Потолок пикселей яруса никогда не выпускается за CFG.dpr = 1.5. */
     this._pixelCap = Math.min(tier.dprCap, this._dprHardCap);
-
-    this.bloomPass.strength = tier.bloom;
-    this._bloomBase = tier.bloom;
-    this.bloomPass.radius = CFG.bloom.radius;
-    this.bloomPass.threshold = CFG.bloom.threshold;
-    this.gradePass.enabled = tier.grade;
 
     const slabMat = this.holoSlab.material;
     slabMat.transmission = tier.transmission;
@@ -2285,7 +2081,6 @@ class CyberpunkScene {
     slabMat.transparent = true;
     slabMat.needsUpdate = true;
 
-    this.floorGrid.material.opacity = index === 2 ? 0.05 : 0.075;
     document.body.classList.toggle('is-low', !tier.liquid);
     this.hud.setQuality(tier.name);
     /* the VFX pools follow the quality ladder: fewer shards / droplets when
@@ -2407,9 +2202,8 @@ class CyberpunkScene {
     /* Кадр под любой экран: на вертикальном телефоне distH выталкивает камеру
        назад, а прицел паркует поле между шапкой и панелью управления. */
     this._fitCamera();
-    this.composer.setPixelRatio(dpr);
-    this.composer.setSize(w, h);
-    this.particleMat.uniforms.uPixelRatio.value = dpr;
+    /* Буфер пост-обработки удалён: renderer сам держит размер drawing buffer,
+       ни composer.setPixelRatio / setSize, ни uniform частиц больше не нужны. */
     if (this.vfx) this.vfx.setPixelRatio(dpr);
   }
 
@@ -2437,21 +2231,17 @@ class CyberpunkScene {
   /** Русское имя яруса качества — для строки телеметрии и отладки. */
   get tierName() { return (TIERS[this._tier] || TIERS[0]).name; }
 
-  /** Действующий потолок pixelRatio: на телефоне 2, дальше — потолок тира. */
+  /** Действующий потолок pixelRatio: потолок яруса, но не выше CFG.dpr = 1.5. */
   get pixelCap() { return this._pixelCap; }
 
-  /** true на телефоне / в Telegram Mini App: лёгкий тир + dpr ≤ 2 по умолчанию. */
+  /** true на телефоне / в Telegram Mini App: лёгкий тир по умолчанию. */
   get mobileProfile() { return this.isMobile; }
 
-  /** Публичный перезапуск авто-рамки и буфера: Telegram разворачивает Mini App
-      асинхронно, и кадром после ready() / expand() размеры уже другие. */
+  /** Публичный перезапуск авто-рамки и drawing buffer: Telegram разворачивает
+      Mini App асинхронно, и кадром после ready() / expand() размеры другие. */
   refit() { this._resize(); }
 
-  setHyperSpeed(on) { this.isHyperSpeed = !!on; }
-
-  toggleHyperSpeed() { this.isHyperSpeed = !this.isHyperSpeed; return this.isHyperSpeed; }
-
-  /** Free-spin bonus palette: tunnel, frames, lights, slab and HUD go red/gold. */
+  /** Free-spin bonus palette: frames, lights, slab and HUD go red / gold. */
   setOverdrive(on) {
     const next = !!on;
     if (this.overdrive === next) return next;
@@ -2479,25 +2269,23 @@ class CyberpunkScene {
 
   /* ---------------- per-frame updates ---------------- */
   _update(dt, t) {
-    this.hyperBlend = damp(this.hyperBlend, this.isHyperSpeed ? 1 : 0, 1.7, dt);
     this.overdriveBlend = damp(this.overdriveBlend, this.overdrive ? 1 : 0, 3.4, dt);
     this.spinKick = damp(this.spinKick, 0, 3.2, dt);
-    const boost = 1 + this.hyperBlend * CFG.particles.hyperBoost + this.spinKick * 1.6;
-    this.bloomPass.strength = this._bloomBase + Math.min(this.spinKick, 1) * 0.14;   /* OVERDRIVE only shifts the hue — no bloom lift */
 
     if (this.spinWave >= 0) {
       this.spinWave += dt / 0.8;
       if (this.spinWave > 1) this.spinWave = -1;
     }
 
-    this._updateTunnel(dt, t, boost);
-    this._updateParticles(dt, t, boost);
     this._updateBoard(dt, t);
     /* SlotEngine ticks the logical grid + symbol animations right before the
        symbol layer writes them to the scene graph. */
     if (this.engine) this.engine.update(dt, t);
     this._updateSymbols(dt, t);
     this._updateLights(t);
+    /* Аркадный саундтрек планирует ноты из этого же кадра: рендер-цикл —
+       единственный дирижёр секвенсора, никаких setInterval / своих таймеров. */
+    if (this.audio && this.audio.updateMusic) this.audio.updateMusic();
     /* Undo last frame's shake BEFORE the controls integrate, so OrbitControls
        always integrates from the pristine director position … */
     if (this.vfx) this.vfx.restoreCamera();
@@ -2510,78 +2298,19 @@ class CyberpunkScene {
     /* … and read the pools + re-apply the impulse right AFTER it: the render
        sees the shake, the next frame's controls never do. */
     if (this.vfx) this.vfx.update(dt, t);
-
-    this.gradePass.uniforms.uTime.value = t;
-    this.gradePass.uniforms.uHyper.value = this.hyperBlend;
   }
 
-  _updateTunnel(dt, t, boost) {
-    const { spacing, startZ } = CFG.tunnel;
-    const hyper = this.hyperBlend;
-    for (const ring of this.tunnel.children) {
-      const ud = ring.userData;
-      ring.position.z += spacing * dt * (0.85 + boost * 0.18);
-      if (ring.position.z > startZ) {
-        ring.position.z -= this._tunnelSpan;
-        ring.position.x = (Math.random() * 2 - 1) * 0.9;
-        ring.position.y = (Math.random() * 2 - 1) * 0.7;
-      }
-      ring.rotation.z += ud.spin * dt * (1 + hyper * 3.4);
-      const depth = startZ - ring.position.z;
-      const fade = 1 - smoothstep(this._tunnelSpan * 0.7, this._tunnelSpan, depth);
-      const pulse = 0.6 + 0.4 * Math.sin(t * 1.6 + ud.phase);
-      ring.material.opacity = clamp((0.10 + pulse * 0.22) * fade * (1 + hyper * 1.3 + this.spinKick * 0.7), 0, 1);
-      const s = ud.radius * (1 + 0.05 * Math.sin(t * 1.1 + ud.phase));
-      ring.scale.set(s, s, 1);
-      ring.material.color.copy(ud.baseColor).lerp(ud.hotColor, this.overdriveBlend).multiplyScalar(0.85 + hyper * 1.4);
-    }
-  }
-
-  _updateParticles(dt, t, boost) {
-    const attr = this.particles.geometry.attributes.position;
-    const pos = attr.array;
-    const speeds = this.particleSpeeds;
-    const base = CFG.particles.baseSpeed;
-    const span = this.particleSpan;
-    for (let i = 0; i < pos.length; i += 3) {
-      pos[i + 2] += base * speeds[i / 3] * boost * dt;
-      if (pos[i + 2] > 14) pos[i + 2] -= span;
-    }
-    attr.needsUpdate = true;
-    this.particles.rotation.z += dt * 0.02 * (1 + this.hyperBlend * 2.5);
-    this.particleMat.uniforms.uHyper.value = this.hyperBlend;
-    this.particleMat.uniforms.uTime.value = t;
-  }
+  /* Поле 6×6: ни cell-сокетов, ни туннеля, ни проектора — только дыхание
+     панели, пульс неоновой рамы, угловые акценты и скан-плита внутри рамки.
+     glow — затухающий импульс КРУТИТЬ (spinKick): он заменил гипер-подсветку,
+     которой больше нет. */
   _updateBoard(dt, t) {
-    const mesh = this.cells;
-    const hyper = this.hyperBlend;
     const kick = this.spinKick;
+    const glow = Math.min(kick, 1);
 
-    /* Cell markers are switched off — _buildCells leaves this.cells === null —
-       so the whole per-cell pulse is skipped and the field keeps only the
-       slab + scan plate + grid breathing below. */
-    if (mesh) {
-      const obj = this._tmpObj;
-      const waveActive = this.spinWave >= 0;
-      const waveX = waveActive ? CFG.grid.min + this.spinWave * (CFG.grid.size - 1) * CFG.grid.step : 99;
-
-      for (let i = 0; i < mesh.count; i++) {
-        const home = this.cellHomes[i];
-        const phase = this.cellPhase[i];
-        const breathe = 0.72 + 0.2 * Math.sin(t * 1.5 + phase);
-        const dx = home.x - waveX;
-        const bump = waveActive ? Math.exp(-dx * dx * 4.5) : 0;
-        const s = clamp(breathe + bump * 0.85 + kick * 0.25 * Math.sin(phase * 3 + t * 20), 0.2, 2.4);
-        obj.position.set(home.x, home.y, Math.sin(t * 1.2 + phase) * 0.06 + bump * 0.42 + kick * 0.15);
-        obj.rotation.set(0, 0, phase + t * 0.35 + bump * 0.8 + hyper * t * 1.2);
-        obj.scale.set(s, s, 0.8 + bump * 1.6 + hyper * 0.6);
-        obj.updateMatrix();
-        mesh.setMatrixAt(i, obj.matrix);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.material.emissiveIntensity = 0.42 + 0.2 * Math.sin(t * 1.8) + hyper * 0.85 + kick * 0.7;
-    }
-
+    /* Маркеры ячеек (36 инстанс-пьедесталов) выключены окончательно, как и
+       туннель с частицами: от поля остались стеклянная подложка, скан-плита,
+       тонкие линии сетки и 36 объёмных символов. */
     this.board.rotation.z = Math.sin(t * 0.34) * 0.012 + Math.sin(t * 58) * 0.014 * kick;
     this.board.rotation.y = Math.sin(t * 0.29) * 0.03;
     this.board.rotation.x = Math.sin(t * 0.23) * 0.02;
@@ -2589,40 +2318,43 @@ class CyberpunkScene {
 
     for (const f of this.frames) {
       const pulse = 0.8 + 0.2 * Math.sin(t * 2.2 + f.phase);
-      f.mesh.material.opacity = clamp(f.opacity * (pulse + hyper * 0.4 + kick * 0.5), 0, 1);
-      f.mesh.material.color.copy(f.baseColor).lerp(f.hotColor, this.overdriveBlend).multiplyScalar(1 + hyper * 0.8 + kick * 0.9);
+      f.mesh.material.opacity = clamp(f.opacity * (pulse + glow * 0.4 + kick * 0.5), 0, 1);
+      f.mesh.material.color.copy(f.baseColor).lerp(f.hotColor, this.overdriveBlend).multiplyScalar(1 + glow * 0.8 + kick * 0.9);
     }
 
     for (const c of this.corners) {
       const p = 0.55 + 0.45 * Math.sin(t * 3.1 + c.phase);
       c.mat.opacity = clamp(0.45 + p * 0.45 + kick * 0.4, 0, 1);
-      c.glowMat.opacity = clamp(0.24 + p * 0.4 + hyper * 0.26, 0, 1);
-      c.glow.scale.setScalar(1.8 + p * 0.55 + hyper * 1.0);
+      c.glowMat.opacity = clamp(0.24 + p * 0.4 + glow * 0.26, 0, 1);
+      c.glow.scale.setScalar(1.8 + p * 0.55 + glow * 1.0);
       c.node.rotation.set(t * 0.9 + c.phase, t * 1.3, 0);
     }
 
     const plateU = this.scanPlate.material.uniforms;
     plateU.uTime.value = t;
-    plateU.uHyper.value = hyper;
+    plateU.uPulse.value = glow * 0.55;
     plateU.uColorA.value.copy(this._plateA).lerp(this._plateHotA, this.overdriveBlend);
     plateU.uColorB.value.copy(this._plateB).lerp(this._plateHotB, this.overdriveBlend);
     this.holoSlab.material.attenuationColor.copy(this._slabCool).lerp(this._slabHot, this.overdriveBlend);
-    this.projector.coneMat.opacity = 0.05 + 0.035 * Math.sin(t * 1.4) + hyper * 0.05;
-    this.projectorRing.rotation.z += dt * (0.4 + hyper * 3);
-    this.projectorGlow.mat.opacity = clamp(0.14 + 0.05 * Math.sin(t * 1.9) + hyper * 0.09, 0, 1);
   }
 
   _updateLights(t) {
-    const hyper = this.hyperBlend;
     const od = this.overdriveBlend;
     const violet = this.lightViolet;
     const cyan = this.lightCyan;
     violet.position.set(Math.sin(t * 0.62) * 7.4, Math.cos(t * 0.44) * 5.2, 4.6 + Math.sin(t * 0.35) * 2.4);
     cyan.position.set(Math.sin(t * 0.51 + 2.4) * -7.8, Math.sin(t * 0.38 + 1.1) * 5.6, 5.0 + Math.cos(t * 0.27) * 2.0);
-    violet.intensity = 105 + 26 * Math.sin(t * 1.1) + hyper * 130 + od * 90;
-    cyan.intensity = 105 - 26 * Math.sin(t * 0.9) + hyper * 130 + od * 90;
+    violet.intensity = 118 + 26 * Math.sin(t * 1.1) + od * 90;
+    cyan.intensity = 118 - 26 * Math.sin(t * 0.9) + od * 90;
     violet.color.copy(this._lightCool).lerp(this._lightHot, od);
     cyan.color.copy(this._lightCoolAlt).lerp(this._lightHotAlt, od);
+  }
+
+  /* Шкала «заряд» = прогресс лестницы множителя: ×1 → 0 %, ×32 → 100 %.
+     (Раньше по ней же показывался гипер драйв.) */
+  _ladderCharge() {
+    const mult = this.engine ? Math.max(this.engine.mult || 1, 1) : 1;
+    return clamp(Math.log2(mult) / 5, 0, 1) * 100;
   }
 
   _telemetry(dt) {
@@ -2632,7 +2364,8 @@ class CyberpunkScene {
     this._hudAcc = 0;
     this.hud.setFps(Math.round(clamp(this._fpsAvg, 0, 240)));
     this.hud.setDraws(this.renderer.info.render.calls);
-    this.hud.setCharge(this.hyperBlend * 100);
+    this._charge = damp(this._charge, this._ladderCharge(), 2.4, 0.4);
+    this.hud.setCharge(this._charge);
     this._autoQuality(0.4);
   }
 
@@ -2642,7 +2375,9 @@ class CyberpunkScene {
     const t = this.clock.elapsedTime;
     this.renderer.info.reset();
     this._update(dt, t);
-    this.composer.render(dt);
+    /* Прямой лёгкий рендер: ни EffectComposer, ни bloom, ни grade-прохода —
+       один вызов renderer.render() пишет кадр прямо в canvas#gl. */
+    this.renderer.render(this.scene, this.camera);
     this._telemetry(dt);
   };
 
@@ -2657,8 +2392,6 @@ class CyberpunkScene {
     document.removeEventListener('visibilitychange', this._onVisibility);
     this.controls.dispose();
     for (const d of this.disposables) if (d && typeof d.dispose === 'function') d.dispose();
-    this.composer.renderTarget1.dispose();
-    this.composer.renderTarget2.dispose();
     this._envRT.dispose();
     this.renderer.dispose();
   }
@@ -2759,7 +2492,6 @@ class SlotEngine {
     this.maxMult = 1;
     this.fsRemaining = 0;
     this.bonusOn = false;
-    this.hyperBase = false;
 
     /* weighted roll table for refills — SCATTER stays rare but always reachable */
     let wtotal = 0;
@@ -2928,11 +2660,9 @@ class SlotEngine {
     this.hud.log((free ? 'фриспин · ставка <span>' : 'вращение · ставка <span>') + this.hud.fmt(bet) + '</span>');
     this._setSpinLabel(free ? 'ФРИСПИН' : 'КРУТИТЬ');
 
-    /* hyper drive: tunnel + particles go warp while the reels are in motion */
-    this.scene.setHyperSpeed(true);
-    this.hud.setHyper(true);
+    /* импульс всей раздачи: панель, рама и символы реагируют на нажатие */
     this.scene.triggerSpinPulse();
-    /* deep hull impulse + turbine whoosh climbing into the deal */
+    /* яркий мажорный свист вращения + восходящее трезвучие вместо гула */
     if (this.audio) this.audio.spin(free);
 
     this._dropField();
@@ -3111,11 +2841,11 @@ class SlotEngine {
 
   /**
    * Heavy FX for a winning cascade (VFXManager): every vanished symbol gets a
-   * flash + instanced shard burst, the geometric centre of the biggest cluster
-   * fires energy arcs to the upper multiplier frame and the projector deck, and
-   * a cluster of 8+ symbols — or a cascade that reached the ×4 rung — punches
-   * the camera with a decaying impulse. Anchors go into a reused buffer, so a
-   * detonation costs zero allocations while the tumble loop is running.
+   * flash + a small instanced shard burst, the geometric centre of the biggest
+   * cluster punches the camera with a decaying impulse, and a cluster of 8+
+   * symbols — or a cascade that reached the ×4 rung — hits harder. Anchors go
+   * into a reused buffer, so a detonation costs zero allocations while the
+   * tumble loop is running.
    */
   _detonate(clusters) {
     const vfx = this.vfx;
@@ -3287,7 +3017,7 @@ class SlotEngine {
       this.fsRemaining += FS_AWARD;
       this.bonusOn = true;
       this._setBonusVisuals(true);
-      /* scatter alert sweep — the drone bed opens in setOverdrive() below */
+      /* scatter alert sweep — аркадная петля раскрывается в setOverdrive() ниже */
       if (this.audio) this.audio.freeSpins(scatters);
       this.hud.setFreeSpins(this.fsRemaining);
       this.hud.log('<span>' + SYMBOL_TYPES[SCATTER].label + ' ×' + scatters + '</span> · ' +
@@ -3307,8 +3037,6 @@ class SlotEngine {
 
     this.hud.setMultiplier(this.mult);
     this._setSpinLabel(this.fsRemaining > 0 ? 'ФРИСПИН' : 'КРУТИТЬ');
-    this.scene.setHyperSpeed(this.hyperBase);
-    this.hud.setHyper(this.hyperBase);
     this.phase = 'idle';
     this.busy = false;
 
@@ -3319,15 +3047,15 @@ class SlotEngine {
       this.hud.setState('ФРИ ×' + this.fsRemaining + ' · КРУТИТЬ');
       this.hud.log('фриспин готов · нажимай <span>КРУТИТЬ</span> · осталось ' + this.fsRemaining);
     } else {
-      this.hud.setState(this.hyperBase ? 'ГИПЕР' : 'ОЖИДАНИЕ');
+      this.hud.setState('ОЖИДАНИЕ');
     }
   }
 
-  /** Red / gold tunnel + HUD override for the whole free-spin session. */
+  /** Red / gold override for the whole free-spin session. */
   _setBonusVisuals(on) {
     this.scene.setOverdrive(on);
-    /* the drone follows the visuals: cutoff, resonance, pulse rate and the
-       bright upper partial all glide over ≈1 s when OVERDRIVE arms / clears */
+    /* звук следует за картинкой: аркадная петля прибавляет яркость, плотность
+       арпеджио и октаву, когда бонус активен (setOverdrive в аудиодвижке) */
     if (this.audio) this.audio.setOverdrive(on);
   }
 
@@ -3356,36 +3084,57 @@ const BETS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50, 100];
 
 /* =========================================================================
    CYBER AUDIO ENGINE · STEP 5 — 100 % procedural Web Audio, zero assets.
-   Nothing is sampled: the cyberpunk drone bed (sub sine + detuned saws behind
-   an LFO-swept lowpass that opens cutoff / resonance / pulse rate the moment
-   OVERDRIVE arms), the SPIN impulse with its turbine whoosh, glass-metal
-   landing pings with a hard polyphony cap (36 symbols rain down together), a
-   cascade arpeggiator that lifts the chord one semitone per ladder rung
-   ×1→×32, detonation sub-hits and the BIG / MEGA WIN saw + sub-bass chord
-   pushed through feedback delay and a procedurally generated convolution hall.
+   Nothing is sampled: instead of the old grim 27.5 / 55 Hz drone bed the game
+   now runs a LIGHT, UPBEAT ARCADE GROOVE — 122 BPM in a major pentatonic
+   (C · G · A · F), a soft pulsing bass, bright plucked arpeggio notes and a
+   feather-light offbeat hat, all quietly mixed under the reels. On top of it:
+   the bright КРУТИТЬ whoosh + rising major triad, glass landing pings with a
+   hard polyphony cap (36 symbols rain down together), a cascade arpeggiator
+   that lifts the chord one semitone per ladder rung ×1→×32, punchy detonations
+   and a BIG / MEGA WIN major chord pushed through feedback delay and a
+   procedurally generated convolution hall.
+   Секвенсор не имеет собственных таймеров: ноты планируются из рендер-цикла
+   (CyberpunkScene._update → updateMusic) коротким look-ahead окном.
    Every voice is a fresh node pair dropped on 'ended', so the graph never
    grows while a session runs and the master bus stays inside the limiter.
    ========================================================================= */
 class CyberAudioEngine {
-  /* A-minor backbone: landings walk the pentatonic, arps stack in thirds. */
-  static PENTA = Object.freeze([0, 3, 5, 7, 10]);
-  static ARP = Object.freeze([0, 3, 7, 12, 15]);      /* minor add9 voicing */
-  static DRONE_ROOT = 55;                             /* A1 — under the mix */
-  static LAND_VOICES = 6;                             /* 36 symbols → 6 max */
-  static LAND_GAP = 0.024;                            /* s between two pings */
+  /* Мажорная пентатоника — опора всего движка: приземления фруктов, арпеджио
+     каскадов и фоновая мелодия идут по одним и тем же ступеням, поэтому микс
+     звучит весело и стройно, а не «минорно-киберпанково». */
+  static PENTA = Object.freeze([0, 2, 4, 7, 9]);
+  static ARP = Object.freeze([0, 4, 7, 12, 16]);      /* мажорное add9 звучание */
+  static LAND_VOICES = 6;                             /* 36 символов → максимум 6 голосов */
+  static LAND_GAP = 0.024;                            /* пауза между двумя пингами, c */
+  /* ------------------------- аркадная фоновая петля ------------------------- */
+  static BPM = 122;                                   /* бодрый аркадный темп */
+  static STEP = 60 / 122 / 4;                         /* 16-я нота ≈ 0.123 c */
+  static STEPS_PER_BAR = 16;                          /* 4/4, шагами на такт */
+  static BARS = 4;                                    /* длина петли: 64 шага */
+  /* Полутон-корни четырёх тактов: C · G · A · F — самый «солнечный» круг
+     мажорной пентатоники, без минорного тона вниз. */
+  static CHORDS = Object.freeze([0, 7, 9, 5]);
+  /* Ступени пентатоники на шаг (null — пауза): мелодия прыгает вверх-вниз,
+     как в аркадных играх, а не ползёт по хроматике. */
+  static MELODY = Object.freeze([0, null, 2, 4, null, 2, 3, null, 4, null, 3, 2, null, 0, 2, null]);
+  static LOOKAHEAD = 0.18;                            /* как далеко вперёд пишем ноты */
+  static MUSIC_LEVEL = 0.15;                          /* «невысокая громкость» фона */
 
   constructor(opts = {}) {
     this.level = clamp(opts.level == null ? 0.78 : Number(opts.level), 0, 1);
     this.muted = !!opts.muted;
     this.ctx = null;
     this.bus = null;
-    this.drone = null;
+    this.music = null;
     this.unlocked = false;
     this.overdrive = false;
     this.landVoices = 0;
     this._lastLand = -1;
     this._noise = null;
     this._ir = null;
+    /* позиция секвенсора: шаг петли + время следующей ноты по часам AudioContext */
+    this._step = 0;
+    this._nextStepTime = 0;
   }
 
   static get supported() {
@@ -3411,7 +3160,7 @@ class CyberAudioEngine {
     this._build();
     this.unlocked = true;
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-    this._startDrone();
+    this._startMusic();
     this._glide(this.bus.master.gain, this.muted ? 0 : this.level, 0.7);
     return true;
   }
@@ -3433,6 +3182,10 @@ class CyberAudioEngine {
       if (this.ctx.state === 'running') this.ctx.suspend().catch(() => {});
     } else if (this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
+      /* после сна часы стоят на месте, но секвенсор всё равно «приземляем» к
+         текущему времени — иначе первый кадр после возврата выстреливает
+         пучком отложенных нот. */
+      this._nextStepTime = this.ctx.currentTime + 0.08;
     }
   }
 
@@ -3571,152 +3324,239 @@ class CyberAudioEngine {
     }
     return node;
   }
-  /* -------------------------- the cyberpunk bed -------------------------- */
-  /** Sub sine + detuned saws behind an LFO-swept lowpass, always breathing. */
-  _startDrone() {
-    if (this.drone || !this.bus) return;
+  /* ------------------------ the upbeat arcade bed ------------------------ */
+  /**
+   * Никакого мрачного гудящего фона (27.5 / 55 Гц дрон удалён вместе с
+   * DRONE_ROOT): шина фоновой музыки — это один светлый lowpass + общий
+   * фейдер, а ноты (пульсирующий бас, мягкий кик, лёгкий хэт и светлые
+   * арпеджио-щипки) пишет секвенсор updateMusic() прямо из рендер-цикла.
+   * Постоянно работающих осцилляторов в миксе ноль: каждый голос — пара
+   * узлов на пару десятых долей секунды, умирающая сама.
+   */
+  _startMusic() {
+    if (this.music || !this.bus) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
-    const root = CyberAudioEngine.DRONE_ROOT;
 
     const out = ctx.createGain();
     out.gain.value = 0.0001;
 
-    /* the swept lowpass is the heart of the bed: idle it breathes between
-       ≈95 Hz and ≈285 Hz, in OVERDRIVE the swing triples and the Q bites */
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 190;
-    filter.Q.value = 5.4;
+    /* Светлый тон: срез вчетверо выше прежнего гула, арпеджио остаются
+       стеклянными, а не «туманными»; Q почти нулевой — никакой окраски. */
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 4200;
+    tone.Q.value = 0.55;
+    tone.connect(out);
 
-    const sweep = ctx.createOscillator();
-    sweep.type = 'sine';
-    sweep.frequency.value = 0.09;
-    const sweepDepth = ctx.createGain();
-    sweepDepth.gain.value = 95;
-    sweep.connect(sweepDepth).connect(filter.frequency);
-
-    /* heartbeat tremolo after the filter, so the whole bed pulses with it */
-    const trem = ctx.createGain();
-    trem.gain.value = 0.86;
-    const pulse = ctx.createOscillator();
-    pulse.type = 'triangle';
-    pulse.frequency.value = 1.7;
-    const pulseDepth = ctx.createGain();
-    pulseDepth.gain.value = 0.06;
-    pulse.connect(pulseDepth).connect(trem.gain);
-
-    const sub = ctx.createOscillator();
-    sub.type = 'sine';
-    sub.frequency.value = root * 0.5;                 /* 27.5 Hz — felt, not heard */
-    const subGain = ctx.createGain();
-    subGain.gain.value = 0.62;
-    sub.connect(subGain).connect(trem);
-
-    const bed = ctx.createOscillator();
-    bed.type = 'sawtooth';
-    bed.frequency.value = root;
-    const bedGain = ctx.createGain();
-    bedGain.gain.value = 0.5;
-    bed.connect(bedGain).connect(filter);
-
-    const fifth = ctx.createOscillator();
-    fifth.type = 'sawtooth';
-    fifth.frequency.value = root * 1.5;
-    fifth.detune.value = -13;
-    const fifthGain = ctx.createGain();
-    fifthGain.gain.value = 0.06;
-    fifth.connect(fifthGain).connect(filter);
-
-    /* bright upper partial: silent at idle, it is the OVERDRIVE timbre shift */
-    const edge = ctx.createOscillator();
-    edge.type = 'sawtooth';
-    edge.frequency.value = root * 4;
-    edge.detune.value = 8;
-    const edgeGain = ctx.createGain();
-    edgeGain.gain.value = 0.004;
-    edge.connect(edgeGain).connect(filter);
-
-    /* static hiss bed just loud enough to hear the filter move */
-    const air = this._noiseVoice(now, 1e6, 1);
-    const airBp = ctx.createBiquadFilter();
-    airBp.type = 'bandpass';
-    airBp.frequency.value = 640;
-    airBp.Q.value = 0.7;
-    const airGain = ctx.createGain();
-    airGain.gain.value = 0.02;
-    air.connect(airBp).connect(airGain).connect(filter);
-
-    filter.connect(trem);
-    trem.connect(out);
-    this._route(out, 1, 0, 0.14);
+    this._route(out, 1, 0.18, 0.2);
     out.gain.setValueAtTime(0.0001, now);
-    out.gain.exponentialRampToValueAtTime(0.19, now + 3.4);
+    out.gain.exponentialRampToValueAtTime(CyberAudioEngine.MUSIC_LEVEL, now + 2.4);
 
-    for (const node of [sub, bed, fifth, edge, sweep, pulse]) node.start(now);
-    this.drone = { out, filter, sweep, sweepDepth, pulse, pulseDepth, trem, sub, bed, fifth, fifthGain, edge, edgeGain, air };
+    this.music = { out, tone };
+    this._step = 0;
+    this._nextStepTime = now + 0.15;
+  }
+
+  /** MIDI → Гц: единственный источник высоты для всего секвенсора. */
+  static hz(midi) {
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  /** Пульсирующий бас: треугольник в основной позиции + синус на октаву выше
+      для читаемости на динамиках телефона. Инфразвукового суб-слоя нет
+      намеренно: 30 Гц на мобильном спикере только жрёт громкость и возвращает
+      тот самый гудящий низ, от которого мы ушли. */
+  _bassNote(at, midi, peak = 0.4, dur = 0.14) {
+    const ctx = this.ctx;
+    const f = CyberAudioEngine.hz(midi);
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = f;
+    const top = ctx.createOscillator();
+    top.type = 'sine';
+    top.frequency.value = f * 2;
+    const topGain = ctx.createGain();
+    topGain.gain.value = 0.4;
+    const mix = ctx.createGain();
+    mix.gain.value = 0.5;
+    osc.connect(mix);
+    top.connect(topGain).connect(mix);
+    const g = this._envelope(at, peak, 0.01, 0.02, dur);
+    mix.connect(g).connect(this.music.tone);
+    osc.start(at);
+    osc.stop(at + dur + 0.1);
+    top.start(at);
+    top.stop(at + dur + 0.1);
+  }
+
+  /** Светлое арпеджио-щипание: быстрая атака, звонкая октавная верхушка. */
+  _pluck(at, midi, peak = 0.17, dur = 0.3) {
+    const ctx = this.ctx;
+    const f = CyberAudioEngine.hz(midi);
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = f;
+    const shine = ctx.createOscillator();
+    shine.type = 'sine';
+    shine.frequency.value = f * 2.004;
+    const shineGain = ctx.createGain();
+    shineGain.gain.value = 0.38;
+    const mix = ctx.createGain();
+    mix.gain.value = 0.55;
+    osc.connect(mix);
+    shine.connect(shineGain).connect(mix);
+    const g = this._envelope(at, peak, 0.004, 0.008, dur);
+    mix.connect(g).connect(this.music.tone);
+    osc.start(at);
+    osc.stop(at + dur + 0.12);
+    shine.start(at);
+    shine.stop(at + dur + 0.12);
+  }
+
+  /** Мягкий «кач» на сильную долю: короткий синус 110 → 55 Гц, без гула. */
+  _kick(at, peak = 0.3) {
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(110, at);
+    osc.frequency.exponentialRampToValueAtTime(55, at + 0.09);
+    const g = this._envelope(at, peak, 0.004, 0.008, 0.12);
+    osc.connect(g).connect(this.music.out);
+    osc.start(at);
+    osc.stop(at + 0.22);
+  }
+
+  /** Перышко хэта на слабую долю: короткий шумовой всплеск выше 7 кГц. */
+  _hat(at, peak = 0.04) {
+    const ctx = this.ctx;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 7200;
+    const g = this._envelope(at, peak, 0.001, 0, 0.03);
+    this._noiseVoice(at, 0.05, 1.8).connect(hp).connect(g);
+    g.connect(this.music.out);
   }
 
   /**
-   * OVERDRIVE / free spins: the bed opens up exactly while the tunnel goes
-   * red / gold — cutoff, resonance, LFO depth + rate, tremolo and the 4th
-   * partial all glide over ≈1 s, then glide back when the bonus clears.
+   * Дирижёр петли. Вызывается каждый кадр из CyberpunkScene._update: пока
+   * контекст жив, расписываем ноты на LOOKAHEAD вперёд — этого хватает с
+   * большим запасом при 60 FPS, и при этом в файле по-прежнему нет ни одного
+   * setInterval / setTimeout-таймера, который устроил бы гонку кадров.
+   */
+  updateMusic() {
+    if (!this.ready || !this.music) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    /* после простоя (свёрнутая вкладка, заблокированный экран) не даём
+       секвенсору вывалить залп «догоняющих» нот */
+    if (!this._nextStepTime || this._nextStepTime < now - 0.35) this._nextStepTime = now + 0.05;
+    const horizon = now + CyberAudioEngine.LOOKAHEAD;
+    let budget = 12;                                  /* потолок шагов за один кадр */
+    while (this._nextStepTime < horizon && budget-- > 0) {
+      this._scheduleStep(this._step, this._nextStepTime);
+      this._step = (this._step + 1) % (CyberAudioEngine.BARS * CyberAudioEngine.STEPS_PER_BAR);
+      this._nextStepTime += CyberAudioEngine.STEP;
+    }
+  }
+
+  /**
+   * Один шаг сетки 122 BPM: бас бьёт по всем восьмым, кик — только 1-я и 3-я
+   * доля, хэт — по слабым восьмым, арпеджио идёт по рисунку MELODY (ступени
+   * мажорной пентатоники текущего такта C · G · A · F). OVERDRIVE поднимает
+   * арпеджио на октаву и добавляет второй голос на слабой доле — бонус
+   * звучит ярче, темп остаётся прежним.
+   */
+  _scheduleStep(step, at) {
+    const E = CyberAudioEngine;
+    const perBar = E.STEPS_PER_BAR;
+    const bar = ((step / perBar) | 0) % E.CHORDS.length;
+    const inBar = step % perBar;
+    const rootSemi = E.CHORDS[bar];
+    const hot = this.overdrive;
+    const swing = inBar % 2 === 1 ? 0.012 : 0;        /* лёгкий свинг слабых долей */
+
+    if (inBar % 2 === 0) {
+      const strong = inBar === 0 || inBar === 8;
+      const walk = inBar === 14 ? 7 : 0;              /* подводящий ход к следующему такту */
+      this._bassNote(at, 36 + rootSemi + walk, strong ? 0.46 : 0.3, strong ? 0.2 : 0.12);
+    }
+    if (inBar === 0 || inBar === 8) this._kick(at, 0.28);
+    if (inBar % 2 === 1) this._hat(at + swing, inBar % 4 === 3 ? 0.05 : 0.028);
+
+    const deg = E.MELODY[inBar];
+    if (deg != null) {
+      const octave = inBar >= 8 ? 12 : 0;
+      this._pluck(at + swing, 60 + rootSemi + E.PENTA[deg % E.PENTA.length] + octave + (hot ? 12 : 0),
+        hot ? 0.2 : 0.16);
+    }
+    if (hot && inBar % 2 === 1) {
+      const extra = ((deg == null ? 0 : deg) + 2) % E.PENTA.length;
+      this._pluck(at + swing, 72 + rootSemi + E.PENTA[extra], 0.11, 0.22);
+    }
+  }
+
+  /**
+   * OVERDRIVE / фриспины: аркадная петля раскрывается вместе с красно-золотой
+   * картинкой — фильтр фоновой шины светлеет, громкость чуть подрастает, а
+   * секвенсор добавляет октаву и второй арпеджио-голос. Всё плавно за ~1 с и
+   * так же плавно возвращается, когда бонус закончился.
    */
   setOverdrive(on) {
     this.overdrive = !!on;
-    if (!this.drone || !this.ctx || this.ctx.state === 'closed') return this.overdrive;
+    if (!this.music || !this.ctx || this.ctx.state === 'closed') return this.overdrive;
     const d = this.overdrive;
-    this._glide(this.drone.filter.frequency, d ? 430 : 190, 1.1);
-    this._glide(this.drone.filter.Q, d ? 9.5 : 5.4, 1.1);
-    this._glide(this.drone.sweepDepth.gain, d ? 320 : 95, 1.4);
-    this._glide(this.drone.sweep.frequency, d ? 0.34 : 0.09, 1.4);
-    this._glide(this.drone.pulse.frequency, d ? 4.2 : 1.7, 0.9);
-    this._glide(this.drone.pulseDepth.gain, d ? 0.15 : 0.06, 0.9);
-    this._glide(this.drone.fifthGain.gain, d ? 0.17 : 0.06, 1.2);
-    this._glide(this.drone.fifth.detune, d ? 26 : -13, 1.2);
-    this._glide(this.drone.edgeGain.gain, d ? 0.055 : 0.004, 1.3);
-    this._glide(this.drone.out.gain, d ? 0.24 : 0.19, 1.0);
+    const base = CyberAudioEngine.MUSIC_LEVEL;
+    this._glide(this.music.tone.frequency, d ? 6800 : 4200, 0.9);
+    this._glide(this.music.tone.Q, d ? 0.9 : 0.55, 0.9);
+    this._glide(this.music.out.gain, d ? base * 1.35 : base, 1.0);
     return this.overdrive;
   }
   /* ------------------------------- the spin ------------------------------- */
-  /** Deep hull impulse + turbine whoosh racing 340 Hz → 5.4 kHz + metal in-rush. */
+  /**
+   * КРУТИТЬ: яркий восходящий свист 480 Гц → 7 кГц + мажорное трезвучие
+   * долями вверх (C - E - G - C) — звонкий жест «поехали!» вместо прежнего
+   * низкого гула корпуса. Лёгкий пружинистый подскок держит ритм, не низ.
+   */
   spin(free = false) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const lift = free ? 1.19 : 1;
 
-    const hull = ctx.createOscillator();
-    hull.type = 'sine';
-    hull.frequency.setValueAtTime(126 * lift, now);
-    hull.frequency.exponentialRampToValueAtTime(31, now + 0.46);
-    const hg = this._envelope(now, 0.9 * lift, 0.006, 0.02, 0.5);
-    hull.connect(hg);
-    this._route(hg, 1, 0.06, 0.05);
-    hull.start(now);
-    hull.stop(now + 0.6);
+    /* пружинистый подскок — короткий и упругий, а не гудящий */
+    const body = ctx.createOscillator();
+    body.type = 'triangle';
+    body.frequency.setValueAtTime(330 * lift, now);
+    body.frequency.exponentialRampToValueAtTime(120, now + 0.16);
+    const bg = this._envelope(now, 0.42 * lift, 0.004, 0.012, 0.2);
+    body.connect(bg);
+    this._route(bg, 1, 0.05, 0.04);
+    body.start(now);
+    body.stop(now + 0.3);
 
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
-    band.Q.value = 3.4;
-    band.frequency.setValueAtTime(340, now);
-    band.frequency.exponentialRampToValueAtTime(5400, now + 0.52);
-    const ng = this._envelope(now, 0.26 * lift, 0.05, 0.12, 0.36);
-    this._noiseVoice(now, 0.64).connect(band).connect(ng);
-    this._route(ng, 1, 0.18, 0.12);
+    band.Q.value = 2.4;
+    band.frequency.setValueAtTime(480, now);
+    band.frequency.exponentialRampToValueAtTime(7000, now + 0.42);
+    const ng = this._envelope(now, 0.24 * lift, 0.03, 0.1, 0.3);
+    this._noiseVoice(now, 0.52).connect(band).connect(ng);
+    this._route(ng, 1, 0.16, 0.1);
 
-    const spark = ctx.createOscillator();
-    spark.type = 'square';
-    spark.frequency.setValueAtTime(1240 * lift, now);
-    spark.frequency.exponentialRampToValueAtTime(300, now + 0.22);
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 900;
-    const sg = this._envelope(now, 0.085, 0.004, 0.01, 0.2);
-    spark.connect(hp).connect(sg);
-    this._route(sg, 1, 0.2, 0.16);
-    spark.start(now);
-    spark.stop(now + 0.28);
+    /* мажорное трезвучие долями вверх — тот самый звонкий аркадный жест */
+    const triad = [0, 4, 7, 12];
+    for (let i = 0; i < triad.length; i++) {
+      const at = now + 0.02 + i * 0.052;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 523.25 * lift * Math.pow(2, triad[i] / 12);
+      const g = this._envelope(at, 0.13 - i * 0.012, 0.003, 0.008, 0.18);
+      o.connect(g);
+      this._route(g, 1, 0.26, 0.2);
+      o.start(at);
+      o.stop(at + 0.26);
+    }
   }
 
   /* ---------------------------- symbol landings ---------------------------- */
@@ -3724,7 +3564,9 @@ class CyberAudioEngine {
    * Glass-metal touchdown ping. 36 symbols hit the field inside half a second,
    * so the engine is hard-capped: at most LAND_VOICES rings at a time and never
    * two closer than LAND_GAP — the rain reads as texture instead of volume.
-   * Pitch walks the A-minor pentatonic per cell with ±1.5 % random detune.
+   * Pitch walks the MAJOR pentatonic per cell with ±1.5 % random detune, the
+   * FM partial sits a clean octave+fifth above the carrier, so every landing
+   * rings bright and sweet instead of dark and clangy.
    */
   land(cell = 0) {
     if (!this.ready) return;
@@ -3737,7 +3579,7 @@ class CyberAudioEngine {
     const penta = CyberAudioEngine.PENTA;
     const step = penta[Math.abs(cell | 0) % penta.length] +
       12 * ((((cell | 0) / penta.length) | 0) % 2);
-    const f = 659.25 * Math.pow(2, (step - 12) / 12) * (1 + (Math.random() * 0.03 - 0.015));
+    const f = 783.99 * Math.pow(2, (step - 12) / 12) * (1 + (Math.random() * 0.03 - 0.015));
     const at = now + Math.random() * 0.014;
 
     const carrier = ctx.createOscillator();
@@ -3746,20 +3588,20 @@ class CyberAudioEngine {
     /* FM off a 3.x partial buys the glass shimmer no filter can fake */
     const mod = ctx.createOscillator();
     mod.type = 'sine';
-    mod.frequency.value = f * 3.02;
+    mod.frequency.value = f * 3.0;
     const modGain = ctx.createGain();
     modGain.gain.setValueAtTime(f * 1.7, at);
     modGain.gain.exponentialRampToValueAtTime(f * 0.04, at + 0.09);
     mod.connect(modGain).connect(carrier.frequency);
 
-    const g = this._envelope(at, 0.15, 0.002, 0.004, 0.13);
+    const g = this._envelope(at, 0.16, 0.002, 0.004, 0.13);
     carrier.connect(g);
     this._route(g, 1, 0.08, 0.24);
 
     const edge = ctx.createBiquadFilter();
     edge.type = 'highpass';
-    edge.frequency.value = 6200;
-    const eg = this._envelope(at, 0.055, 0.001, 0, 0.018);
+    edge.frequency.value = 5200;
+    const eg = this._envelope(at, 0.06, 0.001, 0, 0.02);
     this._noiseVoice(at, 0.03, 1.6).connect(edge).connect(eg);
     this._route(eg, 1, 0, 0.1);
 
@@ -3772,19 +3614,20 @@ class CyberAudioEngine {
   }
   /* --------------------------- cascade arpeggiator --------------------------- */
   /**
-   * Tumble synth: the chord (minor add9) is transposed one semitone up per
+   * Tumble synth: the chord (major add9) is transposed one semitone up per
    * ladder rung, so ×1 → ×2 → ×4 → ×8 → ×16 → ×32 walks the key exactly like
-   * the multiplier does. Notes fan out as an arp, wet into the feedback delay.
+   * the multiplier does. Notes fan out as an arp, wet into the feedback delay,
+   * and the filter stays bright (2.2 kHz → 900 Hz) so a win never sounds sad.
    */
   cascade(rung = 0, voices = 1) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const semi = clamp(rung | 0, 0, 8);
-    const root = 246.94 * Math.pow(2, semi / 12);          /* B♭3 and up */
+    const root = 261.63 * Math.pow(2, semi / 12);          /* C4 и выше */
     const arp = CyberAudioEngine.ARP;
     const spread = voices >= 3 ? 0.052 : 0.078;
-    const peak = 0.15 * (1 - semi * 0.055);                /* hot rungs stay thin */
+    const peak = 0.16 * (1 - semi * 0.05);                 /* hot rungs stay thin */
 
     for (let i = 0; i < arp.length; i++) {
       const at = now + i * spread;
@@ -3800,8 +3643,8 @@ class CyberAudioEngine {
       mix.gain.value = 0.5;
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.setValueAtTime(1400 + semi * 260, at);
-      lp.frequency.exponentialRampToValueAtTime(620, at + 0.5);
+      lp.frequency.setValueAtTime(2200 + semi * 320, at);
+      lp.frequency.exponentialRampToValueAtTime(900, at + 0.5);
       const g = this._envelope(at, peak, 0.01, 0.03, 0.46);
       osc.connect(mix);
       sub.connect(mix);
@@ -3817,7 +3660,7 @@ class CyberAudioEngine {
       const bell = ctx.createOscillator();
       bell.type = 'triangle';
       bell.frequency.value = root * 4;
-      const g = this._envelope(at, peak * 0.9, 0.004, 0.01, 0.5);
+      const g = this._envelope(at, peak * 1.05, 0.004, 0.01, 0.5);
       bell.connect(g);
       this._route(g, 1, 0.4, 0.6);
       bell.start(at);
@@ -3834,22 +3677,22 @@ class CyberAudioEngine {
 
     const sub = ctx.createOscillator();
     sub.type = 'sine';
-    sub.frequency.setValueAtTime(148, now);
-    sub.frequency.exponentialRampToValueAtTime(27, now + 0.34);
-    const sg = this._envelope(now, amp, 0.004, 0.02, 0.36);
+    sub.frequency.setValueAtTime(184, now);
+    sub.frequency.exponentialRampToValueAtTime(44, now + 0.3);
+    const sg = this._envelope(now, amp, 0.004, 0.02, 0.32);
     sub.connect(sg);
     this._route(sg, 1, 0.1, 0.08);
     sub.start(now);
-    sub.stop(now + 0.46);
+    sub.stop(now + 0.44);
 
     const grit = ctx.createOscillator();
     grit.type = 'square';
-    grit.frequency.setValueAtTime(96, now);
-    grit.frequency.exponentialRampToValueAtTime(38, now + 0.2);
+    grit.frequency.setValueAtTime(148, now);
+    grit.frequency.exponentialRampToValueAtTime(62, now + 0.2);
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 900;
-    const gg = this._envelope(now, amp * 0.3, 0.002, 0.005, 0.16);
+    lp.frequency.value = 1500;
+    const gg = this._envelope(now, amp * 0.28, 0.002, 0.005, 0.16);
     grit.connect(lp).connect(gg);
     this._route(gg, 1, 0.06, 0.06);
     grit.start(now);
@@ -3858,11 +3701,26 @@ class CyberAudioEngine {
     const crackBp = ctx.createBiquadFilter();
     crackBp.type = 'bandpass';
     crackBp.Q.value = 1.2;
-    crackBp.frequency.setValueAtTime(2600, now);
-    crackBp.frequency.exponentialRampToValueAtTime(700, now + 0.18);
+    crackBp.frequency.setValueAtTime(3800, now);
+    crackBp.frequency.exponentialRampToValueAtTime(1100, now + 0.18);
     const cg = this._envelope(now, amp * 0.5, 0.002, 0.005, 0.16);
     this._noiseVoice(now, 0.22).connect(crackBp).connect(cg);
     this._route(cg, 1, 0.12, 0.3);
+
+    /* звонкий мажорный искристый «дзынь» поверх взрыва: квинта + большая
+       терция — взрыв кластера звучит как маленький праздник, а не как удар */
+    const sparkle = [7, 4, 12];
+    for (let i = 0; i < sparkle.length; i++) {
+      const at = now + 0.01 + i * 0.028;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 1046.5 * Math.pow(2, sparkle[i] / 12);
+      const g = this._envelope(at, Math.min(0.14, amp * 0.3), 0.002, 0.006, 0.14);
+      o.connect(g);
+      this._route(g, 1, 0.3, 0.4);
+      o.start(at);
+      o.stop(at + 0.22);
+    }
   }
   /** 4+ SCATTER: rising alert sweep; the bed itself opens in setOverdrive(). */
   freeSpins(count = 4) {
@@ -3870,13 +3728,15 @@ class CyberAudioEngine {
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const steps = clamp(count | 0, 4, 8);
-    const arp = CyberAudioEngine.ARP;
+    /* ступени мажорной пентатоники вверх — как набор монеток в аркадах */
+    const penta = CyberAudioEngine.PENTA;
     for (let i = 0; i < steps; i++) {
       const at = now + i * 0.085;
       const o = ctx.createOscillator();
       o.type = 'triangle';
-      o.frequency.value = 440 * Math.pow(2, arp[Math.min(i, arp.length - 1)] / 12) * (i > 3 ? 2 : 1);
-      const g = this._envelope(at, 0.13, 0.004, 0.01, 0.22);
+      const degree = penta[i % penta.length] + 12 * (((i / penta.length) | 0) + (i > 3 ? 1 : 0));
+      o.frequency.value = 523.25 * Math.pow(2, degree / 12);
+      const g = this._envelope(at, 0.15, 0.004, 0.01, 0.22);
       o.connect(g);
       this._route(g, 1, 0.35, 0.5);
       o.start(at);
@@ -3884,20 +3744,21 @@ class CyberAudioEngine {
     }
   }
 
-  /** BIG / MEGA WIN: detuned saw stack + sub-bass riser, drowned in the hall. */
+  /** BIG / MEGA WIN: detuned saw stack + MAJOR chord + rising sub, hall-soaked. */
   bigWin(mega = false) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
-    const root = mega ? 130.81 : 110;                       /* C3 / A2 */
-    const stack = [0, 7, 12, 15, 19, 24];
+    const root = 130.81;                                     /* C3 — мажорная база */
+    /* C - E - G - C - E - G: чистый мажор, никакой минорной грусти */
+    const stack = mega ? [0, 4, 7, 12, 16, 19, 24] : [0, 4, 7, 12, 16, 24];
     const tail = mega ? 3.4 : 2.6;
 
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
     lp.Q.value = 1.1;
-    lp.frequency.setValueAtTime(700, now);
-    lp.frequency.exponentialRampToValueAtTime(mega ? 6200 : 4200, now + 0.7);
+    lp.frequency.setValueAtTime(1400, now);
+    lp.frequency.exponentialRampToValueAtTime(mega ? 8200 : 5600, now + 0.7);
 
     const out = ctx.createGain();
     out.gain.setValueAtTime(0.0001, now);
@@ -3920,9 +3781,9 @@ class CyberAudioEngine {
 
     const sub = ctx.createOscillator();
     sub.type = 'sine';
-    sub.frequency.setValueAtTime(root * 1.02, now);
-    sub.frequency.exponentialRampToValueAtTime(root * 0.5, now + 2.2);
-    const sg = this._envelope(now, 0.5, 0.05, 0.4, 2.1);
+    sub.frequency.setValueAtTime(root * 0.5, now);
+    sub.frequency.exponentialRampToValueAtTime(root * 1.5, now + 2.2);
+    const sg = this._envelope(now, 0.42, 0.05, 0.4, 2.1);
     sub.connect(sg);
     this._route(sg, 1, 0.15, 0.25);
     sub.start(now);
@@ -3931,16 +3792,16 @@ class CyberAudioEngine {
     const riserBp = ctx.createBiquadFilter();
     riserBp.type = 'bandpass';
     riserBp.Q.value = 1.6;
-    riserBp.frequency.setValueAtTime(420, now);
-    riserBp.frequency.exponentialRampToValueAtTime(7200, now + 1);
-    const rg = this._envelope(now, 0.15, 0.5, 0.05, 0.5);
+    riserBp.frequency.setValueAtTime(620, now);
+    riserBp.frequency.exponentialRampToValueAtTime(8400, now + 1);
+    const rg = this._envelope(now, 0.13, 0.5, 0.05, 0.5);
     this._noiseVoice(now, 1.15).connect(riserBp).connect(rg);
     this._route(rg, 1, 0.3, 0.5);
 
     const at = now + 1.05;
     const bell = ctx.createOscillator();
     bell.type = 'triangle';
-    bell.frequency.value = root * (mega ? 6 : 4);
+    bell.frequency.value = root * (mega ? 8 : 6);
     const bg = this._envelope(at, 0.28, 0.004, 0.02, 1.4);
     bell.connect(bg);
     this._route(bg, 1, 0.5, 0.9);
@@ -3948,23 +3809,24 @@ class CyberAudioEngine {
     bell.stop(at + 1.6);
   }
 
-  /** Short UI blip for the mute / hyper / exit controls. */
+  /** Short UI blip for the mute / exit controls: bright, ringing, upbeat. */
   tick(up = true) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const o = ctx.createOscillator();
-    o.type = 'square';
-    o.frequency.setValueAtTime(up ? 640 : 880, now);
-    o.frequency.exponentialRampToValueAtTime(up ? 1180 : 420, now + 0.07);
+    o.type = 'triangle';
+    /* мажорная квкта вверх / квинта вниз — короткий «дзынь», а не писка */
+    o.frequency.setValueAtTime(up ? 784 : 1046.5, now);
+    o.frequency.exponentialRampToValueAtTime(up ? 1568 : 659.25, now + 0.07);
     const hp = ctx.createBiquadFilter();
     hp.type = 'highpass';
-    hp.frequency.value = 420;
-    const g = this._envelope(now, 0.08, 0.002, 0.006, 0.07);
+    hp.frequency.value = 320;
+    const g = this._envelope(now, 0.1, 0.002, 0.006, 0.09);
     o.connect(hp).connect(g);
-    this._route(g, 1, 0.05, 0.08);
+    this._route(g, 1, 0.12, 0.16);
     o.start(now);
-    o.stop(now + 0.12);
+    o.stop(now + 0.16);
   }
 }
 
@@ -4028,22 +3890,12 @@ function hasWebGL2() {
       session: { id: sessionId, initialBalance, inTelegram }
     };
 
-    const toggleHyper = () => {
-      const on = app.toggleHyperSpeed();
-      engine.hyperBase = on;
-      hud.setHyper(on || engine.busy);
-      hud.setState(engine.busy ? (PHASE_LABEL[engine.phase] || engine.phase.toUpperCase()) : (on ? 'ГИПЕР' : 'ОЖИДАНИЕ'));
-      hud.log('гипер драйв · ' + (on ? '<span>включён</span>' : 'выключен'));
-      audio.tick(on);
-    };
-
     /* one call = full spin: stake → deal → BFS clusters → tumbles → payout */
     const spin = () => {
       if (engine.spin()) haptic('light');
     };
 
     hud.el.spin.addEventListener('click', spin);
-    hud.el.hyper.addEventListener('click', toggleHyper);
     hud.el.betUp.addEventListener('click', () => engine.setBetIndex(engine.betIndex + 1));
     hud.el.betDn.addEventListener('click', () => engine.setBetIndex(engine.betIndex - 1));
     /* мобильный лог: на телефоне панель телеметрии свёрнута, чтобы не закрывать
@@ -4052,12 +3904,12 @@ function hasWebGL2() {
 
     /* ---------------- step 5 · procedural audio unlock + controls ----------
        browsers refuse to start an AudioContext before a gesture, so the first
-       pointer / key event arms the drone bed and both listeners then retire. */
+       pointer / key event arms the arcade groove and both listeners retire. */
     const unlockAudio = () => {
       if (!audio.unlock()) return;
       window.removeEventListener('pointerdown', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
-      hud.log('кибер-звук · <span>web-audio</span> разблокирован · басовая подложка нарастает');
+      hud.log('звук · <span>web-audio</span> разблокирован · аркадный ритм ' + CyberAudioEngine.BPM + ' BPM нарастает');
     };
     window.addEventListener('pointerdown', unlockAudio, { passive: true });
     window.addEventListener('keydown', unlockAudio);
@@ -4069,12 +3921,12 @@ function hasWebGL2() {
       if (!muted) audio.tick(true);
       hud.log(muted
         ? 'звук <span>выключен</span> · кнопка динамика или клавиша M включит обратно'
-        : 'звук <span>включён</span> · процедурный киберпанк-микс');
+        : 'звук <span>включён</span> · процедурный аркадный микс ' + CyberAudioEngine.BPM + ' BPM');
       haptic('light');
     };
     if (hud.el.mute) hud.el.mute.addEventListener('click', () => applyMute(!audio.muted));
 
-    /* EXIT: hand the settled wallet back to Telegram via sendData + close.
+    /* EXIT: hand the settled wallet back to Telegram via sendData, then close.
        Outside Telegram the same summary lands in the rail log instead. */
     const exitGame = () => {
       const profit = engine.profit;
@@ -4093,10 +3945,23 @@ function hasWebGL2() {
       audio.setMuted(true);
       hud.setMuted(true);
       hud.setState('СЕССИЯ ЗАКРЫТА');
-      if (inTelegram) {
-        try { tg.sendData(payload); } catch (err) { console.warn('[NEON] sendData failed', err); }
-        hud.log('telegram · <span>sendData</span> отправлен · ' + payload);
-        if (typeof tg.close === 'function') tg.close();
+      /* Optional chaining прямо по требованиям: Telegram может и не оказаться
+         на месте (вкладка браузера, старый WebView, блокировка скрипта), но
+         баланс в таком случае всё равно уходит в лог. */
+      const webApp = window.Telegram?.WebApp;
+      if (inTelegram && webApp) {
+        try {
+          /* sendData сам закрывает окно сразу после отправки данных боту —
+             поэтому tg.close() здесь НЕ вызывается в ту же миллисекунду, а
+             только страхует на случай, если WebApp почему-то не закрылся. */
+          webApp.sendData(payload);
+          hud.log('telegram · <span>sendData</span> отправлен · ' + payload);
+          setTimeout(() => window.Telegram?.WebApp?.close(), 250);
+        } catch (err) {
+          console.warn('[NEON] sendData failed', err);
+          hud.log('telegram · <span>sendData не прошёл</span> · ' + payload);
+          setTimeout(() => window.Telegram?.WebApp?.close(), 250);
+        }
       } else {
         audio.tick(false);
         hud.log('<span>сессия ' + engine.sessionId + '</span> закрыта · баланс <span>' +
@@ -4114,8 +3979,6 @@ function hasWebGL2() {
         if (document.activeElement === hud.el.spin) return;
         e.preventDefault();
         spin();
-      } else if (e.code === 'KeyH') {
-        toggleHyper();
       } else if (e.code === 'KeyM') {
         applyMute(!audio.muted);
       } else if (e.code === 'KeyQ' || e.code === 'Escape') {
@@ -4124,12 +3987,13 @@ function hasWebGL2() {
     });
 
     engine.sync();
-    hud.setHyper(false);
     hud.setCharge(0);
     hud.setMuted(audio.muted);
     hud.setState('ОЖИДАНИЕ');
     hud.log('three.js r' + THREE.REVISION + ' · связь установлена через jsdelivr');
-    hud.log('bloom deep-neon · сила ' + CFG.bloom.strength + ' · радиус ' + CFG.bloom.radius + ' · порог ' + CFG.bloom.threshold);
+    hud.log('рендер <span>напрямую</span> · без EffectComposer / UnrealBloomPass · pixelRatio ≤ ' + CFG.dpr +
+      ' · мягкое свечение дают emissive-материалы символов');
+    hud.log('фон <span>чистый</span> · туннель из колец, летящие частицы, пыль, орбы и конус проектора удалены · только тёмно-фиолетово-синий градиент');
     hud.log('фабрика символов · ' + app.symbolFactory.typeCount + ' объёмных 3D-архетипов · лак metalness 0.2 + хромированные цифры / мягкое свечение');
     const mix = app.symbolCounts.map((c, i) => c + '× ' + SYMBOL_TYPES[i].label).join(' · ');
     hud.log('поле 6×6 готово · ' + app.symbols.length + ' символов · шаг ' + CFG.grid.step + ' · ' + mix);
@@ -4142,8 +4006,8 @@ function hasWebGL2() {
     hud.log('кластерный движок · <span>BFS 4+</span> · лестница ×1→×32 · ' + FS_SCATTERS + '+ ' +
       SYMBOL_TYPES[SCATTER].label.toLowerCase() + ' = ' + FS_AWARD + ' ' + pluralRu(FS_AWARD, 'фриспин', 'фриспина', 'фриспинов'));
     hud.log('запуски · <span>только вручную</span> — каждая раздача, даже бесплатная, ждёт нажатия КРУТИТЬ или ПРОБЕЛ');
-    hud.log('vfx-менеджер · <span>пулы инстансов</span> ' + CFG.vfx.shardCap + ' искр / ' + CFG.vfx.flashCap + ' вспышек · тряска · без орбов и дождя из сфер');
-    hud.log('кибер-звук · <span>CyberAudioEngine</span> · процедурный дрон / турбина / FM-звоны / арпеджио лестницы · ни одного сэмпла');
+    hud.log('vfx-менеджер · <span>пулы инстансов</span> ' + CFG.vfx.shardCap + ' искр / ' + CFG.vfx.flashCap + ' вспышек · ' + CFG.vfx.shardsPerCell[0] + '–' + CFG.vfx.shardsPerCell[2] + ' искр на ячейку · тряска · без орбов и дождя из сфер');
+    hud.log('звук · <span>CyberAudioEngine</span> · весёлый аркадный ритм ' + CyberAudioEngine.BPM + ' BPM в мажорной пентатонике: пульсирующий бас + светлые арпеджио · ни одного сэмпла');
     hud.log('telegram-сессия · <span>' + sessionId + '</span> · стартовый капитал <span>' + hud.fmt(initialBalance) +
       '</span> · ' + (inTelegram ? 'WebApp <span>sendData + close</span> готов' : 'браузерная песочница · ВЫХОД пишет итог в лог'));
 
@@ -4153,11 +4017,11 @@ function hasWebGL2() {
       try {
         tg.ready();
         if (typeof tg.expand === 'function') tg.expand();
-        if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor('#03060d');
-        if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor('#03060d');
+        if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor('#0b0722');
+        if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor('#0b0722');
         if (typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
         /* expand() приходит не в этом же кадре: через 320 мс WebView уже в
-           полный экран, поэтому пересобираем кадр камеры и буфер пост-эффектов */
+           полный экран, поэтому пересобираем кадр камеры и размер буфера */
         setTimeout(() => app.refit(), 320);
       } catch (err) { console.warn('[NEON] telegram chrome skipped', err); }
     }

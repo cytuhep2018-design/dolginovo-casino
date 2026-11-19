@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#03060d" />
-<meta name="description" content="ДОЛГИНОВО КАЗИНО — киберпанк-слот 6×6 с кластерными выплатами: WebGL / Three.js r170, голографический движок, ручной запуск" />
+<meta name="theme-color" content="#0b0722" />
+<meta name="description" content="ДОЛГИНОВО КАЗИНО — слот 6×6 с кластерными выплатами: WebGL / Three.js r170, чистый фиолетово-синий фон, крупные 3D-фрукты, ручной запуск" />
 <title>ДОЛГИНОВО КАЗИНО · КЛАСТЕРНОЕ ПОЛЕ 6×6 — СБОРКА 5 / 5</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,6 +12,13 @@
      кнопки), Exo 2 600 / 700 / 800 — интерфейсный текстовый стек. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Exo+2:wght@600;700;800&display=swap" />
 <link rel="stylesheet" href="style.css" />
+
+<!-- Официальный Telegram WebApp SDK. Классический (не module) скрипт в <head>
+     грузится блокированно и ОБЯЗАТЕЛЬНО должен стоять ДО js/main.js: модуль
+     всегда откладывается до разбора документа, и к его старту window.Telegram.WebApp
+     уже существует — иначе кнопка ВЫХОД не получает sendData и баланс сессии
+     не возвращается бэкенду. -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 
 </head>
 <body>
@@ -31,8 +38,8 @@
     <div class="tele">
       <div class="chip"><i class="dot" aria-hidden="true"></i><span>КАДРЫ</span><b id="tele-fps">—</b></div>
       <div class="chip"><i class="dot dot-violet" aria-hidden="true"></i><span>ОТРИСОВКА</span><b id="tele-draw">—</b></div>
-      <div class="chip" id="chip-hyper"><i class="dot dot-amber" aria-hidden="true"></i><span>ГИПЕР</span><b id="tele-hyper">ВЫКЛ</b></div>
-      <button class="mini" id="btn-hyper" type="button" aria-pressed="false" aria-label="Гипер драйв: включить или выключить">ГИПЕР&nbsp;ДРАЙВ</button>
+      <!-- ГИПЕР ДРАЙВ убран вместе с космическим туннелем: лететь больше некуда,
+           в шапке остались только технические чипы + ЗВУК + ВЫХОД. -->
       <!-- шаг 5 · переключатель звука (процедурный web-audio) + выход из сессии -->
       <button class="mini util" id="btn-audio" type="button" aria-pressed="true" aria-label="Звук: вкл / выкл">
         <svg class="ico ico-on" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
